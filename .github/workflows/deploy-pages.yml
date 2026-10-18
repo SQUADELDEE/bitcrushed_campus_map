@@ -1,0 +1,38 @@
+# Publishes the output/ folder to GitHub Pages.
+# Runs on every push to main, and after each dining update (pushes made by a workflow don't trigger
+# other workflows on their own, so the menu refresh is chained here explicitly).
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ["Update dining menus"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main   # after a dining update, deploy the commit it just pushed
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: output
+      - id: deployment
+        uses: actions/deploy-pages@v4
