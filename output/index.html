@@ -886,7 +886,6 @@ function pinAt(sx, sy, pad = 0) {
 }
 
 function drawPins(ms) {
-  pctx.clearRect(0, 0, innerWidth, innerHeight);
   if (!dining) return;
   const frame = REDUCED_MOTION ? 0 : Math.floor(ms / 450) % 2, now = diningNow();
   for (const g of visiblePins()) {
@@ -1051,6 +1050,187 @@ function flyTo(wx, wy, scale) {
   requestAnimationFrame(step);
 }
 
+// ---------- Bunnies ----------
+// Ambient rabbits that live on the grass and hop around when you're zoomed in close. They're simulated
+// in world meters; only the ones near the screen are updated and drawn, and the sprite is drawn with
+// plain 2D drawImage calls on the pins canvas, so even a crowded view costs well under a millisecond.
+const BUNNY = {
+  minScale: 4.5,          // px per meter before they appear
+  clusters: 95,           // families of 1-3 scattered over the map's grass
+  hopTime: 0.34,          // seconds in the air
+  hopDist: [2.2, 3.8],    // meters per hop
+  hopHeight: 7,           // sprite pixels at the top of the arc
+};
+const bunnySprite = new Image();
+bunnySprite.src = "sprites/bunny.png";
+let bunnies = [], grassMask = null, grassMaskLoading = false, bunnyFade = 0, lastBunnyMs = 0;
+let bunnyTintKey = "", bunnyTinted = null;
+
+// Which 2 m cells are grass, from the 2 m/px class tiles (loaded once, the first time you zoom in)
+async function loadGrassMask() {
+  grassMaskLoading = true;
+  const L = meta.levels.find(l => l.mpp === 2) || meta.levels[0];
+  const size = L.size_px, mask = new Uint8Array(size * size), canvasTmp = document.createElement("canvas");
+  const cctx = canvasTmp.getContext("2d", { willReadFrequently: true });
+  for (let ty = 0; ty < L.tiles; ty++) for (let tx = 0; tx < L.tiles; tx++) {
+    const t = tile(L, tx, ty, "grid_");
+    if (!t.ready) await new Promise(r => t.img.addEventListener("load", r, { once: true }));
+    canvasTmp.width = t.img.width; canvasTmp.height = t.img.height;
+    cctx.drawImage(t.img, 0, 0);
+    const d = cctx.getImageData(0, 0, t.img.width, t.img.height).data;
+    for (let y = 0; y < t.img.height; y++) for (let x = 0; x < t.img.width; x++) {
+      if (d[(y * t.img.width + x) * 4] === CLS.grass) mask[(ty * meta.tile_px + y) * size + tx * meta.tile_px + x] = 1;
+    }
+  }
+  grassMask = { mask, size, mpp: L.mpp };
+  spawnBunnies();
+}
+
+function grassAt(wx, wy) {
+  const g = grassMask, x = Math.floor(wx / g.mpp), y = Math.floor(wy / g.mpp);
+  return x >= 0 && y >= 0 && x < g.size && y < g.size && g.mask[y * g.size + x] === 1;
+}
+// a spot a bunny can stand on: grass underfoot and around it, so the sprite (which extends up and
+// sideways from its feet) doesn't overlap walls or paths, and not under the edge clouds
+function onGrass(wx, wy) {
+  return grassAt(wx, wy) && grassAt(wx, wy - 3) && grassAt(wx - 2.5, wy) && grassAt(wx + 2.5, wy)
+    && edgeDist(wx, wy) > FOG_DEPTH;
+}
+
+function spawnBunnies() {
+  // seeded random so everyone sees the same families in the same meadows
+  let seed = 1234567;
+  const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const S = meta.size_m;
+  for (let c = 0, tries = 0; c < BUNNY.clusters && tries < 20000; tries++) {
+    const x = rand() * S, y = rand() * S;
+    if (!onGrass(x, y)) continue;
+    c++;
+    const n = 1 + Math.floor(rand() * 3);
+    for (let i = 0; i < n; i++) {
+      const bx = x + (rand() - 0.5) * 6, by = y + (rand() - 0.5) * 6;
+      if (!onGrass(bx, by)) continue;
+      bunnies.push({ x: bx, y: by, face: rand() < 0.5 ? 1 : -1, state: "idle", t: 0, wait: 1 + rand() * 5,
+                     hops: 0, fx: bx, fy: by, tx: bx, ty: by, breathe: rand() * 6.28, shy: rand() });
+    }
+  }
+}
+
+function startHop(b) {
+  for (let k = 0; k < 6; k++) {               // look for a landing spot that's still grass
+    const ang = b.hops > 0 && k === 0 ? b.ang : Math.random() * Math.PI * 2;
+    const d = BUNNY.hopDist[0] + Math.random() * (BUNNY.hopDist[1] - BUNNY.hopDist[0]);
+    const tx = b.x + Math.cos(ang) * d, ty = b.y + Math.sin(ang) * d;
+    if (onGrass(tx, ty)) {
+      Object.assign(b, { state: "crouch", t: 0, fx: b.x, fy: b.y, tx, ty, ang });
+      if (Math.abs(tx - b.x) > 0.3) b.face = tx > b.x ? 1 : -1;
+      return;
+    }
+  }
+  Object.assign(b, { state: "idle", t: 0, wait: 1 + Math.random() * 3, hops: 0 });
+}
+
+function updateBunny(b, dt, calm) {
+  b.t += dt;
+  if (b.state === "idle") {
+    if (b.t > b.wait && !calm) {
+      b.hops = 1 + Math.floor(Math.random() * 4);
+      startHop(b);
+    } else if (b.t > b.wait) {                // bad weather: stay put and look around now and then
+      Object.assign(b, { t: 0, wait: 2 + Math.random() * 5 });
+      if (Math.random() < 0.3) b.face *= -1;
+    }
+  } else if (b.state === "crouch" && b.t > 0.09) {
+    Object.assign(b, { state: "air", t: 0 });
+  } else if (b.state === "air") {
+    const k = Math.min(1, b.t / BUNNY.hopTime);
+    b.x = b.fx + (b.tx - b.fx) * k; b.y = b.fy + (b.ty - b.fy) * k;
+    if (k >= 1) Object.assign(b, { state: "land", t: 0 });
+  } else if (b.state === "land" && b.t > 0.16) {
+    b.hops--;
+    if (b.hops > 0) { b.state = "pause"; b.t = 0; b.wait = 0.06 + Math.random() * 0.2; }
+    else Object.assign(b, { state: "idle", t: 0, wait: 1.5 + Math.random() * 5 });
+  } else if (b.state === "pause" && b.t > b.wait) {
+    startHop(b);
+  }
+}
+
+// squash & stretch: [width scale, height scale, lift in sprite px]
+function bunnyPose(b, ms) {
+  if (b.state === "crouch") { const k = b.t / 0.09; return [1 + 0.16 * k, 1 - 0.16 * k, 0]; }
+  if (b.state === "air") {
+    const k = Math.min(1, b.t / BUNNY.hopTime), s = Math.cos(k * Math.PI);   // +1 rising .. -1 falling
+    return [1 - 0.1 * Math.abs(s), 1 + 0.14 * Math.abs(s), Math.sin(k * Math.PI) * BUNNY.hopHeight];
+  }
+  if (b.state === "land") {                      // splat, then spring back with a little wobble
+    const k = b.t / 0.16, squash = Math.cos(k * Math.PI * 1.5) * (1 - k) * 0.28;
+    return [1 + squash, 1 - squash, 0];
+  }
+  const breath = REDUCED_MOTION ? 0 : Math.sin(ms / 700 + b.breathe) * 0.025;   // idle: gentle breathing
+  return [1 - breath * 0.5, 1 + breath, 0];
+}
+
+// The sprite multiplied by the current light (day/night/weather), rebuilt only when the light changes
+function bunnyImage(tint) {
+  const key = tint.map(v => Math.round(v * 40)).join();
+  if (key === bunnyTintKey && bunnyTinted) return bunnyTinted;
+  const c = document.createElement("canvas"), w = bunnySprite.width, h = bunnySprite.height;
+  c.width = w; c.height = h;
+  const cc = c.getContext("2d");
+  cc.drawImage(bunnySprite, 0, 0);
+  cc.globalCompositeOperation = "multiply";
+  cc.fillStyle = `rgb(${tint.map(v => Math.min(255, Math.round(v * 255))).join()})`;
+  cc.fillRect(0, 0, w, h);
+  cc.globalCompositeOperation = "destination-in";   // keep the sprite's transparency
+  cc.drawImage(bunnySprite, 0, 0);
+  bunnyTintKey = key; bunnyTinted = c;
+  return c;
+}
+
+function drawBunnies(ms) {
+  const dt = Math.min(0.05, (ms - lastBunnyMs) / 1000);
+  lastBunnyMs = ms;
+  const want = view.scale >= BUNNY.minScale ? 1 : 0;
+  bunnyFade += (want - bunnyFade) * (1 - Math.exp(-dt * 8));
+  if (bunnyFade < 0.02 || !bunnySprite.complete || !bunnySprite.width) return;
+  if (!grassMask) { if (!grassMaskLoading) loadGrassMask(); return; }
+
+  // sprite pixel size grows in steps with zoom so the bunny stays crisp pixel art
+  const p = Math.max(1, Math.min(4, Math.round(view.scale / 4))), w = bunnySprite.width, h = bunnySprite.height;
+  const [ax, ay] = toWorld(-w * p, -h * p), [bx, by] = toWorld(innerWidth + w * p, innerHeight + h * p);
+  const calm = weather.rain > 0.4 || weather.snow > 0.4 || weather.storm > 0.5 || REDUCED_MOTION;
+  const hidden = Math.max(weather.rain, weather.snow) * 0.75;   // most bunnies shelter in heavy weather
+  const img = bunnyImage(sceneTint());
+  pctx.imageSmoothingEnabled = false;
+  pctx.globalAlpha = bunnyFade;
+
+  const onScreen = [];
+  for (const b of bunnies) {
+    if (b.x < ax || b.x > bx || b.y < ay || b.y > by || b.shy < hidden) continue;
+    updateBunny(b, dt, calm);
+    onScreen.push(b);
+  }
+  onScreen.sort((a, b) => a.y - b.y);              // nearer (lower) bunnies overlap the ones behind
+  for (const b of onScreen) {
+    const [sx, sy, lift] = bunnyPose(b, ms);
+    const fx = Math.round(b.x * view.scale + view.x), fy = Math.round(b.y * view.scale + view.y);   // feet
+    // shadow stays on the ground and shrinks as the bunny rises (down-right, like everything else)
+    const shrink = 1 - lift / BUNNY.hopHeight * 0.4;
+    const sw = Math.round(w * 0.7 * p * shrink), sh = Math.max(p, Math.round(2 * p * shrink));
+    pctx.fillStyle = "rgba(10,8,20,0.28)";
+    pctx.fillRect(fx - sw / 2 + p, fy - sh / 2 + p, sw, sh);
+    pctx.fillRect(fx - sw / 2 + 2 * p, fy - sh / 2, sw - 2 * p, sh + 2 * p);
+    // body, anchored at the feet so squashing pushes it out sideways rather than off the ground
+    const dw = Math.round(w * p * sx), dh = Math.round(h * p * sy), top = fy - dh - Math.round(lift * p);
+    pctx.save();
+    pctx.translate(fx, 0);
+    pctx.scale(b.face === 1 ? -1 : 1, 1);           // sprite faces left; mirror to hop right
+    pctx.drawImage(img, -Math.round(dw / 2), top, dw, dh);
+    pctx.restore();
+  }
+  pctx.globalAlpha = 1;
+}
+
 // ---------- Frame loop ----------
 // The map animates every frame; labels live on a separate 2D canvas and only redraw when the view changes.
 let labelsDirty = true, frameCount = 0;
@@ -1102,6 +1282,8 @@ function render(ms) {
     if (showLabels) drawLabels();
     updateDetail(cur);
   }
+  pctx.clearRect(0, 0, innerWidth, innerHeight);
+  drawBunnies(ms);   // ambient bunnies under the pins
   drawPins(ms);
   if (++frameCount % 120 === 0) freeOldTextures();
 }
