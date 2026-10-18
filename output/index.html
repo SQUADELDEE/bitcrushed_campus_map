@@ -873,8 +873,16 @@ function visiblePins() {
     .filter(g => g.box[2] > 0 && g.box[3] > 0 && g.box[0] < innerWidth && g.box[1] < innerHeight);
 }
 
-function pinAt(sx, sy) {
-  return visiblePins().find(g => sx >= g.box[0] && sx <= g.box[2] && sy >= g.box[1] && sy <= g.box[3]);
+// pad grows the hit area (fingers are less precise than a mouse). When areas overlap the closest pin
+// wins, and on a tie the one drawn on top (later in the list) wins, matching what the user sees.
+function pinAt(sx, sy, pad = 0) {
+  let best = null, bestD = Infinity;
+  for (const g of visiblePins()) {
+    const dx = Math.max(g.box[0] - sx, 0, sx - g.box[2]), dy = Math.max(g.box[1] - sy, 0, sy - g.box[3]);
+    const d = Math.hypot(dx, dy);
+    if (d <= pad && d <= bestD) { best = g; bestD = d; }
+  }
+  return best;
 }
 
 function drawPins(ms) {
@@ -1266,12 +1274,14 @@ canvas.addEventListener("pointermove", e => {
 });
 const up = e => { pointers.delete(e.pointerId); lastPinch = null; if (!pointers.size) canvas.classList.remove("dragging"); };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
-// a click (press and release without dragging) on a dining pin opens that hall's menu
+// a tap or click (press and release without really dragging) on a dining pin opens that hall's menu.
+// Touch gets more wiggle room: fingers drift a few pixels while tapping and cover a bigger area.
 let pressAt = null;
 canvas.addEventListener("pointerdown", e => { pressAt = [e.clientX, e.clientY]; });
 canvas.addEventListener("pointerup", e => {
-  if (!pressAt || Math.hypot(e.clientX - pressAt[0], e.clientY - pressAt[1]) > 5) return;
-  const pin = pinAt(e.clientX, e.clientY);
+  const touch = e.pointerType !== "mouse";
+  if (!pressAt || Math.hypot(e.clientX - pressAt[0], e.clientY - pressAt[1]) > (touch ? 12 : 5)) return;
+  const pin = pinAt(e.clientX, e.clientY, touch ? 16 : 0);
   if (pin) openHall(pin.loc.id);
 });
 canvas.addEventListener("pointerleave", () => { tip.style.display = "none"; lastHover = null; });
