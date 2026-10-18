@@ -1,0 +1,1279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Campus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --panel: rgba(28, 26, 24, 0.88); --text: #f4efe6; --muted: #b8b0a2; --accent: #e07a55; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2a2724; color: var(--text);
+    font: 14px/1.4 "Pixelify Sans", ui-monospace, Menlo, monospace; }
+  canvas { position: fixed; inset: 0; display: block; width: 100vw; height: 100vh; cursor: grab; touch-action: none; }
+  #map, #pins { pointer-events: none; }
+  canvas.dragging { cursor: grabbing; }
+  .panel { position: fixed; background: var(--panel); border-radius: 6px; padding: 10px 12px; }
+  #title { top: 12px; left: 12px; }
+  #title h1 { margin: 0 0 2px; font-size: 18px; letter-spacing: 0.06em; }
+  #title p { margin: 0; color: var(--muted); }
+  #controls { top: 12px; right: 12px; display: flex; gap: 6px; align-items: center; }
+  button { background: #45403a; color: var(--text); border: 0; border-radius: 4px; padding: 6px 10px;
+    font: inherit; cursor: pointer; }
+  button:hover { background: #57514a; }
+  button[aria-pressed="true"] { background: var(--accent); color: #1c1a18; }
+  #clock { top: 64px; right: 12px; width: 260px; display: flex; flex-direction: column; gap: 6px; }
+  #clock[hidden] { display: none; }
+  #clock .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #clock-phase { color: var(--muted); }
+  #clock input { flex: 1; accent-color: var(--accent); }
+  #clock button { padding: 3px 8px; }
+  #clock button:disabled { opacity: 0.4; cursor: default; }
+  #clock .wx { border-top: 1px solid #45403a; padding-top: 6px; }
+  #wx-hint { color: var(--muted); }
+  #clock select { flex: 1; background: #45403a; color: var(--text); border: 0; border-radius: 4px; padding: 4px 6px; font: inherit; }
+  #detail { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
+    padding: 6px 12px; }
+  #detail .pips { display: flex; gap: 4px; }
+  #detail .pip { width: 10px; height: 10px; background: #45403a; }
+  #detail .pip.on { background: var(--accent); }
+  #detail .lbl { color: var(--muted); min-width: 84px; }
+  #tip { position: fixed; pointer-events: none; padding: 5px 8px; display: none; white-space: nowrap; }
+  #tip small { color: var(--muted); font-size: 12px; }
+  #legend { bottom: 12px; left: 12px; display: grid; grid-template-columns: repeat(2, auto); gap: 2px 14px; }
+  #legend span { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; }
+  #attrib { bottom: 12px; right: 12px; color: var(--muted); padding: 4px 8px; font-size: 12px; }
+  #attrib a { color: var(--muted); }
+  #dining { top: 64px; left: 12px; width: 340px; max-height: calc(100vh - 130px); overflow-y: auto; padding: 12px 14px; }
+  #dining[hidden] { display: none; }
+  body.dining-open #legend { display: none; }
+  .dn-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .dn-head h2 { flex: 1; margin: 0; font-size: 17px; }
+  .dn-head button { padding: 2px 9px; }
+  .dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; flex: none; }
+  .dn-list { list-style: none; margin: 0; padding: 0; }
+  .dn-list button { width: 100%; text-align: left; display: grid; grid-template-columns: auto 1fr; align-items: center;
+    background: transparent; padding: 7px 4px; border-bottom: 1px solid #3a3530; border-radius: 0; }
+  .dn-list button:hover { background: #3a3530; }
+  .dn-list .nm small { color: var(--muted); }
+  .dn-list .st { grid-column: 2; color: var(--muted); font-size: 13px; }
+  .dn-foot, .dn-addr { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .dn-foot a { color: var(--muted); }
+  .dn-status { margin: 0; display: flex; align-items: center; }
+  .dn-addr { margin: 2px 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+  .chip { padding: 3px 8px; font-size: 13px; }
+  .chip.on { background: var(--accent); color: #1c1a18; }
+  .filters { margin: 8px 0; border-top: 1px solid #3a3530; border-bottom: 1px solid #3a3530; padding: 6px 0; }
+  .filters summary { cursor: pointer; color: var(--muted); }
+  .filters .lbl { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .menu section { margin-top: 10px; }
+  .menu h4 { margin: 0 0 4px; font-size: 14px; color: var(--accent); }
+  .menu ul { list-style: none; margin: 0; padding: 0; }
+  .menu li { padding: 3px 0; font-size: 14px; line-height: 1.3; }
+  .menu li small { display: block; color: var(--muted); font-size: 11px; }
+  .tag { display: inline-block; margin-left: 5px; padding: 0 4px; font-size: 10px; border-radius: 2px; vertical-align: 1px;
+    background: #45403a; color: var(--text); }
+  .tag-VGN, .tag-VGTN { background: #4f8f3f; } .tag-HL { background: #3f6f8f; } .tag-KSHR { background: #6f4f8f; }
+  .tag-SO { background: #8f5f3f; }
+  .empty { color: var(--muted); }
+  @media (max-width: 760px) {
+    #dining { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 58vh; z-index: 5; }
+    #legend { display: none; } #title p { display: none; }
+    #detail { bottom: 44px; } #attrib { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<canvas id="pins"></canvas>
+<canvas id="c"></canvas>
+<div id="title" class="panel"><h1>PIXEL CAMPUS</h1><p>Brown University · drag to pan · scroll to zoom</p></div>
+<div id="controls" class="panel">
+  <button id="dining-btn" aria-pressed="false" hidden>Dining</button>
+  <button id="lighting" aria-pressed="false" title="Switch between classic lighting and the real time and weather in Providence">Live</button>
+  <button id="labels" aria-pressed="true">Labels</button>
+  <button id="reset">Reset</button>
+</div>
+<div id="clock" class="panel" hidden>
+  <div class="row"><span id="clock-time"></span><span id="clock-phase"></span></div>
+  <div class="row"><input id="clock-slider" type="range" min="0" max="1439" step="1" aria-label="Preview time of day">
+  <button id="clock-now">Now</button></div>
+  <div class="row wx"><span id="wx-now"></span><span id="wx-hint"></span></div>
+  <div class="row"><label for="wx-select">Weather</label>
+  <select id="wx-select">
+    <option value="real">Real weather</option><option value="clear">Clear</option><option value="overcast">Overcast</option>
+    <option value="rain">Rain</option><option value="downpour">Heavy rain</option><option value="snow">Snow</option>
+    <option value="fog">Fog</option><option value="storm">Thunderstorm</option>
+  </select></div>
+</div>
+<aside id="dining" class="panel" hidden aria-label="Dining menus"><div id="dn-body"></div></aside>
+<div id="detail" class="panel"><span class="pips"></span><span class="lbl"></span></div>
+<div id="tip" class="panel"></div>
+<div id="legend" class="panel"></div>
+<div id="attrib" class="panel">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors<span id="wx-credit" hidden> · Weather: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></span></div>
+
+<script>
+// World coordinates are meters from the map's top-left corner.
+// view.scale = screen pixels per meter; screen = world * scale + (x, y)
+const MIN_PIXEL = 2.5;          // switch to a finer level once its pixels would be >= this many screen px
+const MIN_SCALE = 0.25, MAX_SCALE = 40;
+const FOG_BLOCK = 4;           // cloud pixel size in screen px (same chunkiness at every zoom)
+const FOG_DEPTH = 200;         // labels / hover within this many meters of the map edge are under cloud
+const STREET_MIN_SCALE = [0.8, 1.5, 2.6, 5];   // by street rank: major, tertiary, residential, other
+const LEGEND = ["grass", "trees", "water", "pitch", "parking", "plaza", "road", "path", "building", "campus_bldg"];
+const NICE = { campus_bldg: "campus building", bldg_edge: "building", building: "building", road_mark: "road",
+               crosswalk: "crosswalk", sidewalk: "sidewalk" };
+
+const mapCanvas = document.getElementById("map");   // WebGL: tiles, water, clouds
+const canvas = document.getElementById("c");         // 2D overlay: labels, and receives input
+const ctx = canvas.getContext("2d");
+const tip = document.getElementById("tip");
+const view = { x: 0, y: 0, scale: 1 };
+let meta, buildings = [], streets = [], showLabels = true, fitted = false, lastHover = null, CLS = {};
+// surface kind per tile class, used by the shader: 1 water, 2 roof, 3 soft ground, 4 tree canopy, 5 walkway, 6 roadway
+const KIND_OF = { water: 1, building: 2, campus_bldg: 2, ground: 3, grass: 3, pitch: 3, track: 3, sand: 3,
+  trees: 4, tree: 4, sidewalk: 5, path: 5, plaza: 5, road: 6, road_mark: 6, crosswalk: 6, parking: 6, rail: 6 };
+const CLASS_KIND = new Int32Array(24), CLASS_COLOR = new Float32Array(24 * 3);
+const tiles = new Map();   // "dir/name" -> { img, ready, data }
+
+Promise.all([
+  fetch("meta.json").then(r => r.json()),
+  fetch("buildings.json").then(r => r.json()),
+  fetch("streets.json").then(r => r.json()),
+  fetch("dining.json").then(r => r.ok ? r.json() : null).catch(() => null),   // optional layer
+  document.fonts.load('700 13px "Pixelify Sans"').catch(() => {}),
+]).then(([m, b, s, d]) => {
+  meta = m; buildings = b; streets = s;
+  initDining(d);
+  for (const c of meta.classes) {
+    CLS[c.name] = c.id;
+    CLASS_KIND[c.id] = KIND_OF[c.name] || 0;
+    [1, 3, 5].forEach((o, j) => CLASS_COLOR[c.id * 3 + j] = parseInt(c.color.slice(o, o + 2), 16) / 255);
+  }
+  for (const bld of buildings) {
+    const pts = bld.polygons.flat();
+    bld.bbox = [Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])),
+                Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1]))];
+  }
+  document.getElementById("legend").innerHTML = LEGEND.map(n => {
+    const c = meta.classes.find(k => k.name === n);
+    return `<div><span style="background:${c.color}"></span>${NICE[n] || n}</div>`;
+  }).join("");
+  document.querySelector("#detail .pips").innerHTML = meta.levels.map(() => '<span class="pip"></span>').join("");
+  resize();
+});
+
+// ---------- Levels & tiles ----------
+function currentLevel() {
+  // levels are sorted coarse -> fine; take the finest whose pixels are still big on screen
+  let pick = meta.levels[0];
+  for (const L of meta.levels) if (L.mpp * view.scale >= MIN_PIXEL) pick = L;
+  return pick;
+}
+
+function tile(L, tx, ty, kind = "") {
+  const key = `${L.dir}/${kind}${tx}_${ty}`;
+  let t = tiles.get(key);
+  if (!t) {
+    t = { img: new Image(), ready: false, tex: null, used: 0 };
+    t.img.onload = () => { t.ready = true; requestDraw(); if (kind && lastHover) hover(...lastHover); };
+    t.img.src = key + ".png";
+    tiles.set(key, t);
+  }
+  return t;
+}
+
+function visibleTiles(L) {
+  const span = meta.tile_px * L.mpp;   // meters per tile
+  const [ax, ay] = toWorld(0, 0), [bx, by] = toWorld(innerWidth, innerHeight);
+  const lo = v => Math.max(0, Math.floor(v / span)), hi = v => Math.min(L.tiles - 1, Math.floor(v / span));
+  const out = [];
+  for (let ty = lo(ay); ty <= hi(by); ty++) for (let tx = lo(ax); tx <= hi(bx); tx++) out.push([tx, ty]);
+  return out;
+}
+
+// ---------- WebGL map renderer ----------
+// Each tile is drawn as a quad. The fragment shader reads the color tile and the class (grid) tile;
+// water pixels get animated, everything else is passed through untouched. A full-screen pass then
+// draws the pixelated edge clouds on top.
+const gl = mapCanvas.getContext("webgl2", { alpha: false, antialias: false });
+
+const GLSL_COMMON = `#version 300 es
+precision highp float;
+float hash12(vec2 p) {            // stable per-pixel random number in [0, 1)
+  vec3 p3 = fract(vec3(p.xyx) * .1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float vnoise(vec2 p) {            // smooth value noise in [0, 1]
+  vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1, 0)), u.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), u.x), u.y);
+}
+float fbm(vec2 p, int octaves) {
+  float s = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) { if (i >= octaves) break; s += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; }
+  return s;
+}
+float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }`;
+
+const TILE_VS = `#version 300 es
+in vec2 aPos;
+uniform vec4 uRect;   // device px: x0, y0, x1, y1
+uniform vec2 uRes;
+out vec2 vUv;
+void main() {
+  vUv = aPos;
+  vec2 clip = mix(uRect.xy, uRect.zw, aPos) / uRes * 2.0 - 1.0;
+  gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
+}`;
+
+const TILE_FS = GLSL_COMMON + `
+uniform sampler2D uColor, uGrid;
+uniform bool uHasGrid;
+uniform vec2 uTexSize, uOrigin;   // tile size and its offset within the level, in level pixels
+uniform float uMpp, uTime;
+uniform int uKind[24];            // surface kind of each tile class (see K_* below)
+uniform vec3 uPalette[24];        // flat color of each class, to tell baked shadows apart from lit pixels
+uniform vec3 uTint;               // time-of-day (and weather) color multiplier; 1,1,1 = classic lighting
+uniform float uNight;             // 0 = day, 1 = full night (windows and streetlights on)
+uniform float uCloud, uWet, uRain, uSnowCover, uIce;   // weather, all 0..1
+uniform vec2 uDrift;              // how far the clouds have blown, meters
+in vec2 vUv;
+out vec4 outColor;
+
+const int K_WATER = 1, K_ROOF = 2, K_SOFT = 3, K_CANOPY = 4, K_WALK = 5, K_ROAD = 6;
+
+int classAt(ivec2 p) {
+  p = clamp(p, ivec2(0), ivec2(uTexSize) - 1);
+  return int(texelFetch(uGrid, p, 0).r * 255.0 + 0.5);
+}
+int kindAt(ivec2 p) { return uKind[classAt(p)]; }
+
+// Expanding ring from a raindrop: each 2.5 m cell occasionally spawns one at a random spot
+float ripple(vec2 wm) {
+  vec2 cell = floor(wm / 2.5);
+  float cyc = uTime * 1.3 + hash12(cell + 0.37) * 17.0;
+  float slot = floor(cyc), age = fract(cyc);
+  if (age > 0.8 || hash12(cell + slot * 1.913) > uRain * 0.7) return 0.0;
+  vec2 ctr = (cell + 0.25 + 0.5 * vec2(hash12(cell + slot), hash12(cell - slot))) * 2.5;
+  float d = distance(wm + uMpp * 0.5, ctr);
+  return abs(d - age * 1.2) < max(uMpp * 0.6, 0.3) ? 1.0 - age : 0.0;
+}
+
+void main() {
+  ivec2 tp = ivec2(min(floor(vUv * uTexSize), uTexSize - 1.0));
+  vec3 c = texelFetch(uColor, tp, 0).rgb;
+  int cls = uHasGrid ? classAt(tp) : -1;
+  int kind = cls >= 0 ? uKind[cls] : 0;
+  vec2 gp = uOrigin + vec2(tp);      // pixel index within the whole level
+  vec2 wm = gp * uMpp;               // meters, so patterns line up across detail levels
+  // baked building shadows make a pixel ~22% darker than its class color
+  bool shadowed = cls >= 0 && lum(c) < lum(uPalette[cls]) * 0.88;
+
+  // ---- Water: ice in hard freezes, otherwise waves, sparkles, shore foam, rain ripples ----
+  bool iced = kind == K_WATER && uIce > 0.0 && vnoise(wm / 14.0) < uIce;
+  if (iced) {
+    c = mix(vec3(0.80, 0.87, 0.93), vec3(0.92, 0.95, 0.98), step(0.75, hash12(gp)));
+    if (shadowed) c *= 0.85;
+  } else if (kind == K_WATER) {
+    float t = floor(uTime * 6.0) / 6.0; // stepped time keeps motion choppy, like sprite animation
+
+    float w = sin(wm.x * 0.11 + wm.y * 0.06 - t * 1.1) + 0.6 * sin(-wm.x * 0.05 + wm.y * 0.14 + t * 0.7);
+    c += step(1.3, w) * 0.035;
+    c -= step(w, -1.35) * 0.025;
+
+    float h = hash12(gp);
+    float sparkle = step(0.988, h) * step(fract(uTime * 0.3 + h * 13.0), 0.1);
+    c = mix(c, vec3(0.88, 0.95, 1.0), sparkle * 0.85 * (1.0 - uCloud * 0.7));
+
+    bool shore = false;
+    for (int i = 0; i < 4; i++) {
+      ivec2 d = ivec2(i == 0 ? 1 : i == 1 ? -1 : 0, i == 2 ? 1 : i == 3 ? -1 : 0);
+      if (kindAt(tp + d) != K_WATER) shore = true;
+    }
+    if (shore) {
+      float on = step(0.5, 0.5 + 0.5 * sin(t * 1.4 + hash12(floor(wm / 4.0)) * 6.283));
+      c = mix(c, vec3(0.82, 0.91, 0.97), 0.25 + 0.3 * on);
+    }
+    if (uRain > 0.0) c += ripple(wm) * 0.22;
+  }
+
+  // ---- Snow cover: roofs and lawns fill in first, paths less, roads are plowed ----
+  float snow = 0.0;
+  if (uSnowCover > 0.0 && kind != K_WATER) {
+    float patchy = vnoise(wm / 5.0) * 0.7 + hash12(gp) * 0.3;
+    float s = uSnowCover;
+    if (kind == K_ROOF) snow = step(patchy, s * 1.2 - 0.05);
+    else if (kind == K_SOFT) snow = step(patchy, s * 1.1 - 0.1);
+    else if (kind == K_WALK) snow = step(patchy, s * 0.45 - 0.15) * 0.8;   // mostly shoveled
+    else if (kind == K_CANOPY) {
+      bool top = kindAt(tp + ivec2(0, -1)) != K_CANOPY;      // snow settles on the top edge of each tree
+      snow = top && hash12(gp + 5.1) < 0.75 ? step(0.25, s) : 0.0;
+    } else if (kind == K_ROAD) {
+      bool kerb = false;                                       // slushy berms where the plow pushed it
+      for (int i = 0; i < 4; i++) {
+        ivec2 d = ivec2(i == 0 ? 1 : i == 1 ? -1 : 0, i == 2 ? 1 : i == 3 ? -1 : 0);
+        if (kindAt(tp + d) != K_ROAD) kerb = true;
+      }
+      snow = kerb ? step(0.3, s) * 0.75 : 0.0;
+      c = mix(c, c * 0.92 + 0.03, s * 0.6);                    // damp, salted asphalt
+    }
+    // roofs catch the brightest snow; ground snow is a touch greyer so buildings still read
+    vec3 sc = kind == K_ROOF ? vec3(0.98, 0.99, 1.0) : vec3(0.82, 0.86, 0.92);
+    if (shadowed) sc = vec3(0.68, 0.74, 0.88);
+    sc *= 0.97 + 0.04 * hash12(gp + 2.2);
+    if (kind == K_ROAD) sc = mix(sc, vec3(0.62, 0.62, 0.66), 0.4);
+    if (kind == K_WALK) sc = mix(sc, c, 0.25);
+    c = mix(c, sc, snow);
+  }
+
+  // ---- Rain: darker wet surfaces, puddles with ripples, glints ----
+  if (uWet > 0.0 && snow < 0.5) {
+    if (kind == K_ROAD || kind == K_WALK) {
+      c *= 1.0 - 0.2 * uWet;
+      if (vnoise(wm / 3.0 + 41.0) > 1.0 - 0.3 * uWet) {
+        c = mix(c, vec3(0.50, 0.58, 0.70), 0.45 * uWet);
+        if (uRain > 0.0) c += ripple(wm) * 0.18;
+      }
+      c += step(0.996, hash12(gp + floor(uTime * 3.0))) * 0.25 * uWet;
+    } else if (kind == K_SOFT || kind == K_CANOPY) c *= 1.0 - 0.1 * uWet;
+    else if (kind == K_ROOF) c *= 1.0 - 0.12 * uWet;
+  }
+
+  // ---- Cloud shadows drifting across the map, and a flatter, greyer light under cover ----
+  if (uCloud > 0.0) {
+    float n = fbm((wm - uDrift) / 260.0, 3);
+    c *= 1.0 - 0.16 * step(n, uCloud * 1.05 - 0.05);
+    c = mix(c, vec3(lum(c)), 0.3 * uCloud);
+  }
+
+  // ---- Time of day ----
+  c *= uTint;
+  if (uNight > 0.0 && cls >= 0) {
+    if (kind == K_ROOF) {
+      // Lit windows: a 3 m grid of window spots when detailed, scattered single pixels when coarse.
+      // Each window changes state every minute or so, on its own schedule.
+      float lit;
+      if (uMpp <= 1.0) {
+        vec2 cell = floor(wm / 3.0), f = fract(wm / 3.0);
+        float slot = floor(uTime / 60.0 + hash12(cell) * 5.0);
+        bool spot = f.x > 0.3 && f.x < 0.75 && f.y > 0.3 && f.y < 0.75;
+        lit = spot && hash12(cell + slot * 0.731) < 0.38 ? 1.0 : 0.0;
+      } else {
+        lit = step(hash12(gp), 0.16);
+      }
+      c = mix(c, vec3(1.0, 0.83, 0.45), lit * uNight * 0.9);
+    } else if (kind == K_ROAD || kind == K_WALK) {
+      // Streetlight pools: one lamp per 22 m cell at a random spot, lighting only paved pixels,
+      // stepped into rings so it stays pixel-art. Wet pavement and snow reflect more of it.
+      vec2 cell = floor(wm / 22.0);
+      float best = 1e9;
+      for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+        vec2 cc = cell + vec2(dx, dy);
+        vec2 lamp = (cc + 0.2 + 0.6 * vec2(hash12(cc), hash12(cc + 7.3))) * 22.0;
+        best = min(best, distance(wm, lamp));
+      }
+      float reach = 8.0 + 1.5 * uWet;
+      float g = floor(clamp(1.0 - best / reach, 0.0, 1.0) * 3.0) / 3.0;
+      c += vec3(0.75, 0.55, 0.25) * g * uNight * (1.0 + 0.25 * uWet + 0.2 * snow);
+    }
+  }
+  outColor = vec4(c, 1.0);
+}`;
+
+const FOG_VS = `#version 300 es
+in vec2 aPos;
+void main() { gl_Position = vec4(aPos * 2.0 - 1.0, 0.0, 1.0); }`;
+
+// Everything "in the air": edge clouds and their shadows, fog, rain, snow, lightning.
+// Output is premultiplied alpha; layers are stacked bottom to top with over().
+const FOG_FS = GLSL_COMMON + `
+uniform vec2 uRes, uView;      // device px; view offset in css px
+uniform float uDpr, uScale, uSize, uTime, uBlock;
+uniform vec3 uTint;
+uniform float uCloud, uFog, uRain, uSnow, uStorm, uFlash;
+uniform vec2 uDrift, uWind;    // cloud drift (meters); wind direction on screen, ~1 = strong
+out vec4 outColor;
+
+// Cloud coverage at a world position (meters): ~0 well inside the map, >= 0.5 is cloud
+float coverage(vec2 w) {
+  // distance to the map edge, with the corners rounded off so the visible area reads as an island
+  float square = min(min(w.x, uSize - w.x), min(w.y, uSize - w.y));
+  float round_ = uSize * 0.6 - length(w - uSize * 0.5);
+  float inside = min(square, round_);
+  float thick = max(uCloud, uFog);                           // grey days pull the clouds inward
+  float edge = smoothstep(280.0 + 160.0 * thick, -20.0, inside);
+  float n = fbm((w - uDrift) / 150.0, 4);
+  return edge + (n - 0.47 + 0.1 * thick) * 1.15;
+}
+const float BAYER[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+
+vec4 over(vec4 below, vec3 col, float a) { return vec4(col * a, a) + below * (1.0 - a); }
+
+void main() {
+  vec2 css = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uDpr;
+  vec2 block = floor(css / uBlock);                  // clouds are drawn in fixed-size screen blocks
+  vec2 w = ((block + 0.5) * uBlock - uView) / uScale; // world meters at the block center
+  vec2 step1 = vec2(uBlock) / uScale;                 // one block, in meters
+  float th = (BAYER[int(mod(block.x, 4.0)) + int(mod(block.y, 4.0)) * 4] + 0.5) / 16.0;
+  vec3 airTint = mix(uTint, vec3(1.0), 0.2);          // clouds and precipitation catch a bit more light
+  vec4 acc = vec4(0.0);
+
+  // 1. Edge clouds, or their drop shadow on the map
+  float c = coverage(w);
+  if (c >= 0.5 && !(c < 0.56 && (c - 0.5) / 0.06 < th)) {   // dithered fringe at each cloud's edge
+    vec3 col = c > 0.62 ? vec3(0.97, 0.96, 0.93) : vec3(0.89, 0.87, 0.84);
+    if (coverage(w + step1) < 0.5) col = vec3(0.77, 0.76, 0.77);       // underside, away from the light
+    else if (coverage(w - step1) < 0.5) col = vec3(1.0);               // lit rim facing the light
+    col *= 1.0 - 0.18 * uCloud - 0.15 * uStorm;                         // heavier, greyer clouds
+    acc = vec4(col * airTint, 1.0);
+  } else if (coverage(w - step1 * 5.0) >= 0.5) {
+    acc = over(acc, vec3(0.07, 0.06, 0.12), 0.22);
+  }
+
+  // 2. Fog: a drifting, dithered haze over everything
+  if (uFog > 0.0) {
+    float d = uFog * (0.55 + 0.45 * fbm((w - uDrift * 0.5) / 80.0, 3));
+    float a = d * 0.45 + (th < d * 0.9 ? 0.18 * uFog : 0.0);
+    acc = over(acc, vec3(0.86, 0.87, 0.89) * mix(uTint, vec3(1.0), 0.35), a);
+  }
+
+  // 3. Rain: diagonal streaks in 3 px screen pixels, two layers at different speeds
+  if (uRain > 0.0) {
+    vec2 rb = floor(css / 3.0);
+    float slant = clamp(uWind.x * 0.6, -0.7, 0.7);
+    float col = floor(rb.x - rb.y * slant);
+    for (int L = 0; L < 2; L++) {
+      float fl = float(L);
+      float h = hash12(vec2(col, 11.0 + fl * 7.0));
+      if (h > uRain * 0.55) continue;
+      float speed = (L == 0 ? 55.0 : 38.0) + 20.0 * hash12(vec2(col, 3.0 + fl));
+      float period = 40.0 + 30.0 * hash12(vec2(col, 5.0 + fl));
+      float len = L == 0 ? 4.0 : 3.0;
+      float pos = mod(rb.y - uTime * speed - h * 911.0, period);
+      if (pos < len) acc = over(acc, vec3(0.78, 0.84, 0.95) * mix(uTint, vec3(1.0), 0.4),
+                                (L == 0 ? 0.55 : 0.32) * (0.5 + 0.5 * pos / len));
+    }
+  }
+
+  // 4. Snow: single flakes wobbling down, a near layer (bigger, faster) and a far one
+  if (uSnow > 0.0) {
+    for (int L = 0; L < 2; L++) {
+      float fl = float(L), size = L == 0 ? 4.0 : 3.0;
+      vec2 q = css / size;
+      float wobble = sin(q.y * 0.15 + uTime * 1.3 + fl * 2.0) * 1.2;
+      vec2 p = vec2(q.x + wobble - uWind.x * uTime * (L == 0 ? 3.0 : 2.0), q.y - uTime * (L == 0 ? 7.0 : 4.5));
+      vec2 cell = floor(p / 7.0);
+      vec2 spot = floor(vec2(hash12(cell + fl * 13.0), hash12(cell + fl * 13.0 + 5.1)) * 7.0);
+      if (floor(mod(p, 7.0)) == spot && hash12(cell + 2.7 + fl) < uSnow * 0.9)
+        acc = over(acc, vec3(0.97, 0.98, 1.0) * mix(uTint, vec3(1.0), 0.5), L == 0 ? 0.95 : 0.7);
+    }
+  }
+
+  // 5. Lightning
+  if (uFlash > 0.0) acc = over(acc, vec3(0.95, 0.96, 1.0), uFlash * 0.55);
+
+  outColor = acc;
+}`;
+
+function compile(vs, fs) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.bindAttribLocation(p, 0, "aPos");
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i++) {
+    const name = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, "");
+    u[name] = gl.getUniformLocation(p, name);
+  }
+  return { p, u };
+}
+
+let tileProg, fogProg;
+if (gl) {
+  tileProg = compile(TILE_VS, TILE_FS);
+  fogProg = compile(FOG_VS, FOG_FS);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+} else {
+  document.body.insertAdjacentHTML("beforeend",
+    '<div class="panel" style="top:45%;left:50%;transform:translate(-50%,-50%)">This map needs WebGL 2.</div>');
+}
+
+function texture(t, gray) {
+  if (!t.tex) {
+    t.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);   // class ids must arrive unchanged
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    if (gray) gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, t.img);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, t.img);
+    for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST);
+    for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE);
+  }
+  return t.tex;
+}
+
+function drawLevel(L, load, time) {
+  const span = meta.tile_px * L.mpp, dpr = window.devicePixelRatio || 1, now = performance.now();
+  const u = tileProg.u;
+  for (const [tx, ty] of visibleTiles(L)) {
+    const t = load ? tile(L, tx, ty) : tiles.get(`${L.dir}/${tx}_${ty}`);
+    if (!t || !t.ready) continue;
+    const g = load ? tile(L, tx, ty, "grid_") : tiles.get(`${L.dir}/grid_${tx}_${ty}`);
+    t.used = now; if (g) g.used = now;
+    // snap edges to whole screen pixels so neighbouring tiles never leave a hairline gap
+    const x0 = Math.round(tx * span * view.scale + view.x), y0 = Math.round(ty * span * view.scale + view.y);
+    const x1 = Math.round((tx * span + t.img.width * L.mpp) * view.scale + view.x);
+    const y1 = Math.round((ty * span + t.img.height * L.mpp) * view.scale + view.y);
+    gl.uniform4f(u.uRect, x0 * dpr, y0 * dpr, x1 * dpr, y1 * dpr);
+    gl.uniform2f(u.uTexSize, t.img.width, t.img.height);
+    gl.uniform2f(u.uOrigin, tx * meta.tile_px, ty * meta.tile_px);
+    gl.uniform1f(u.uMpp, L.mpp);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texture(t, false));
+    const hasGrid = !!(g && g.ready);
+    gl.uniform1i(u.uHasGrid, hasGrid);
+    if (hasGrid) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texture(g, true)); }
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+}
+
+function freeOldTextures() {
+  // drop GPU copies of tiles that haven't been on screen for a while (the coarsest level always stays)
+  const cutoff = performance.now() - 10000;
+  for (const [key, t] of tiles) {
+    if (t.tex && t.used < cutoff && !key.startsWith(meta.levels[0].dir + "/")) { gl.deleteTexture(t.tex); t.tex = null; }
+  }
+}
+
+// ---------- Time of day ----------
+// "Classic" is the original flat lighting. "Live" follows the real sun over Providence: the sun's
+// elevation picks a tint and how "night" it is (windows and streetlights fade in around dusk).
+const LIGHT_KEYS = [   // [sun elevation in degrees, color tint, night amount]
+  [12, [1.00, 1.00, 1.00], 0],
+  [4,  [1.05, 0.95, 0.84], 0],      // golden hour
+  [0,  [1.00, 0.78, 0.66], 0.15],   // sunset
+  [-4, [0.62, 0.55, 0.78], 0.7],    // dusk
+  [-9, [0.32, 0.35, 0.58], 1],      // night
+];
+const CLASSIC = { tint: [1, 1, 1], night: 0 };
+const light = { tint: [1, 1, 1], night: 0 };
+let lightMode = "classic", timeOverride = null, lastLightMs = 0;
+try { if (localStorage.getItem("pixelcampus.light") === "live") lightMode = "live"; } catch {}
+
+function sunElevation(date, lat, lon) {
+  // Low-precision solar position (good to a fraction of a degree), from days since J2000
+  const rad = Math.PI / 180, d = date.getTime() / 86400000 - 10957.5;
+  const g = (357.529 + 0.98560028 * d) * rad;
+  const L = (280.459 + 0.98564736 * d + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+  const e = (23.439 - 0.00000036 * d) * rad;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
+  const dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const lst = ((18.697374558 + 24.06570982441908 * d) * 15 + lon) * rad;
+  const ha = lst - ra;
+  return Math.asin(Math.sin(lat * rad) * Math.sin(dec) + Math.cos(lat * rad) * Math.cos(dec) * Math.cos(ha)) / rad;
+}
+
+function lightingFor(elev) {
+  if (elev >= LIGHT_KEYS[0][0]) return { tint: LIGHT_KEYS[0][1], night: LIGHT_KEYS[0][2] };
+  for (let i = 1; i < LIGHT_KEYS.length; i++) {
+    const [e0, t0, n0] = LIGHT_KEYS[i - 1], [e1, t1, n1] = LIGHT_KEYS[i];
+    if (elev >= e1) {
+      const k = (e0 - elev) / (e0 - e1);
+      return { tint: t0.map((v, j) => v + (t1[j] - v) * k), night: n0 + (n1 - n0) * k };
+    }
+  }
+  const last = LIGHT_KEYS[LIGHT_KEYS.length - 1];
+  return { tint: last[1], night: last[2] };
+}
+
+// Providence wall-clock helpers (works no matter what timezone the viewer is in)
+const TZ = "America/New_York";
+function tzParts(date) {
+  const o = {};
+  for (const p of new Intl.DateTimeFormat("en-US", { timeZone: TZ, hourCycle: "h23", year: "numeric", month: "numeric",
+    day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" }).formatToParts(date)) o[p.type] = +p.value;
+  return o;
+}
+function providenceMinutes(date) { const p = tzParts(date); return p.hour * 60 + p.minute; }
+function dateAtProvidenceMinute(min) {
+  const now = new Date(), p = tzParts(now);
+  const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(now / 1000) * 1000;
+  return new Date(Date.UTC(p.year, p.month - 1, p.day, 0, min) - offset);
+}
+
+function sceneDate() { return timeOverride == null ? new Date() : dateAtProvidenceMinute(timeOverride); }
+
+function updateLighting(ms) {
+  let target = CLASSIC, elev = null;
+  if (lightMode === "live" && meta) {
+    elev = sunElevation(sceneDate(), meta.center.lat, meta.center.lon);
+    target = lightingFor(elev);
+  }
+  // ease toward the target so switching modes or scrubbing time fades instead of snapping
+  const k = 1 - Math.exp(-Math.min(0.1, (ms - lastLightMs) / 1000) * 5);
+  lastLightMs = ms;
+  for (let j = 0; j < 3; j++) light.tint[j] += (target.tint[j] - light.tint[j]) * k;
+  light.night += (target.night - light.night) * k;
+  if (elev != null && ms - (updateLighting.uiAt || 0) > 500) { updateLighting.uiAt = ms; updateClock(elev); }
+}
+
+const clockEl = document.getElementById("clock"), slider = document.getElementById("clock-slider");
+function updateClock(elev) {
+  const date = sceneDate();
+  document.getElementById("clock-time").textContent = "Providence " +
+    date.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+  document.getElementById("clock-phase").textContent =
+    elev > 12 ? "Day" : elev > 2 ? "Golden hour" : elev > -2 ? "Sunset" : elev > -8 ? "Dusk" : "Night";
+  if (timeOverride == null && document.activeElement !== slider) slider.value = providenceMinutes(date);
+  document.getElementById("clock-now").disabled = timeOverride == null;
+}
+
+function setLightMode(mode) {
+  lightMode = mode;
+  try { localStorage.setItem("pixelcampus.light", mode); } catch {}
+  document.getElementById("lighting").setAttribute("aria-pressed", mode === "live");
+  clockEl.hidden = mode !== "live";
+  updateLighting.uiAt = 0;
+  if (meta && typeof updateWeatherUI === "function") { updateWeatherUI(); if (mode === "live") weatherFetchedAt = 0; }
+}
+document.getElementById("lighting").onclick = () => setLightMode(lightMode === "live" ? "classic" : "live");
+slider.oninput = () => { timeOverride = +slider.value; updateLighting.uiAt = 0; };
+document.getElementById("clock-now").onclick = () => { timeOverride = null; updateLighting.uiAt = 0; };
+setLightMode(lightMode);
+
+// ---------- Weather ----------
+// Live mode pulls current conditions for Providence from Open-Meteo (free, no key) every 15 minutes and
+// boils them down to a few 0..1 numbers the shaders understand. The preview menu swaps in presets.
+const WMO = {   // weather code -> [label, precipitation intensity 0..1]
+  0: ["Clear", 0], 1: ["Mostly clear", 0], 2: ["Partly cloudy", 0], 3: ["Overcast", 0],
+  45: ["Fog", 0], 48: ["Freezing fog", 0],
+  51: ["Light drizzle", 0.25], 53: ["Drizzle", 0.35], 55: ["Heavy drizzle", 0.5],
+  56: ["Freezing drizzle", 0.3], 57: ["Freezing drizzle", 0.45],
+  61: ["Light rain", 0.4], 63: ["Rain", 0.65], 65: ["Heavy rain", 1], 66: ["Freezing rain", 0.45], 67: ["Freezing rain", 0.8],
+  71: ["Light snow", 0.35], 73: ["Snow", 0.6], 75: ["Heavy snow", 0.95], 77: ["Snow grains", 0.3],
+  80: ["Light showers", 0.45], 81: ["Showers", 0.7], 82: ["Heavy showers", 1],
+  85: ["Snow showers", 0.5], 86: ["Heavy snow showers", 0.9],
+  95: ["Thunderstorm", 0.85], 96: ["Thunderstorm, hail", 0.9], 99: ["Thunderstorm, hail", 1],
+};
+const SNOW_CODES = new Set([71, 73, 75, 77, 85, 86]);
+const CALM = { cloud: 0, rain: 0, wet: 0, snow: 0, snowCover: 0, fog: 0, storm: 0, ice: 0, windX: 0.5, windY: 0.2 };
+const WEATHER_PRESETS = {   // for the preview menu: [label, temp °C, state]
+  clear:    ["Clear", 21, { ...CALM, cloud: 0.05 }],
+  overcast: ["Overcast", 13, { ...CALM, cloud: 0.95 }],
+  rain:     ["Rain", 11, { ...CALM, cloud: 0.9, rain: 0.6, wet: 1, windX: 0.4 }],
+  downpour: ["Heavy rain", 14, { ...CALM, cloud: 1, rain: 1, wet: 1, windX: 1.1, windY: 0.4 }],
+  snow:     ["Snow", -3, { ...CALM, cloud: 0.9, snow: 0.6, snowCover: 1, ice: 0.35, windX: 0.3 }],
+  fog:      ["Fog", 9, { ...CALM, cloud: 0.6, fog: 0.85, wet: 0.4, windX: 0.15, windY: 0.05 }],
+  storm:    ["Thunderstorm", 22, { ...CALM, cloud: 1, rain: 0.9, wet: 1, storm: 1, windX: 1.2, windY: 0.5 }],
+};
+
+const weather = { ...CALM };                       // eased values the shaders see
+let weatherChoice = "real", realWeather = null, weatherFetchedAt = 0, weatherError = false;
+let drift = [0, 0], lastWeatherMs = 0, flashStart = -1, nextFlashAt = 0;
+
+async function fetchWeather() {
+  weatherFetchedAt = Date.now();
+  const { lat, lon } = meta.center;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    "&current=temperature_2m,weather_code,precipitation,rain,snowfall,cloud_cover,wind_speed_10m," +
+    "wind_direction_10m,visibility,snow_depth&minutely_15=precipitation,snowfall" +
+    "&past_minutely_15=4&forecast_minutely_15=9&timezone=America%2FNew_York";
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    realWeather = parseWeather(await r.json());
+    weatherError = false;
+  } catch (e) {
+    console.warn("Weather unavailable:", e);
+    weatherError = true;
+  }
+  updateWeatherUI();
+}
+
+function parseWeather(j) {
+  const cur = j.current, code = cur.weather_code, [label, intensity0] = WMO[code] || ["Unknown", 0];
+  const m = j.minutely_15, now = m.time.indexOf(cur.time);
+  const mmPerHour = (cur.precipitation || 0) * 4;   // current value is the last 15 minutes
+  const intensity = Math.max(intensity0, Math.min(1, mmPerHour / 6));
+  const snowing = SNOW_CODES.has(code) || cur.snowfall > 0;
+  const precip = code >= 51 && intensity > 0;
+  const recent = m.precipitation.slice(0, Math.max(0, now)).reduce((a, b) => a + (b || 0), 0);   // last hour
+  const freezing = cur.temperature_2m <= 0;
+  const fog = code === 45 || code === 48 ? 0.85 : Math.max(0, Math.min(0.85, (4000 - (cur.visibility ?? 40000)) / 3500));
+  const toward = (cur.wind_direction_10m + 180) * Math.PI / 180, strength = Math.min(1.5, cur.wind_speed_10m / 25);
+
+  // forecast hint: precipitation starting or stopping within the next two hours
+  let hint = "";
+  if (now >= 0) {
+    for (let i = now + 1; i < m.time.length; i++) {
+      const wetSoon = m.precipitation[i] >= 0.1, mins = (i - now) * 15;
+      if (!precip && wetSoon) { hint = `${m.snowfall[i] > 0 || freezing ? "Snow" : "Rain"} in ~${mins} min`; break; }
+      if (precip && !wetSoon) { hint = `Easing in ~${mins} min`; break; }
+    }
+  }
+  return {
+    label, tempC: cur.temperature_2m, hint,
+    state: {
+      cloud: Math.max(cur.cloud_cover / 100, precip ? 0.85 : 0, fog * 0.8),
+      rain: precip && !snowing ? intensity : 0,
+      wet: freezing ? 0 : precip && !snowing ? 1 : Math.min(1, recent / 1.0),
+      snow: snowing ? intensity : 0,
+      snowCover: Math.max(Math.min(1, (cur.snow_depth || 0) / 0.08), snowing ? 0.35 : 0),
+      fog, storm: code >= 95 ? 1 : 0,
+      ice: Math.max(0, Math.min(1, (-6 - cur.temperature_2m) / 8)),
+      windX: Math.sin(toward) * strength, windY: -Math.cos(toward) * strength,   // screen: +x east, +y south
+    },
+  };
+}
+
+function weatherTarget() {
+  if (lightMode !== "live") return { ...CALM };
+  if (weatherChoice !== "real") return WEATHER_PRESETS[weatherChoice][2];
+  return realWeather ? realWeather.state : { ...CALM };
+}
+
+function updateWeather(ms) {
+  if (lightMode === "live" && weatherChoice === "real" && Date.now() - weatherFetchedAt > 15 * 60 * 1000) fetchWeather();
+  const dt = Math.min(0.1, (ms - lastWeatherMs) / 1000);
+  lastWeatherMs = ms;
+  const target = weatherTarget(), k = 1 - Math.exp(-dt * 1.2);   // weather rolls in over a few seconds
+  for (const key in CALM) weather[key] += (target[key] - weather[key]) * k;
+
+  // clouds blow with the wind (always a gentle breeze so the edge clouds never freeze)
+  if (!REDUCED_MOTION) {
+    const wx = weather.windX, wy = weather.windY, len = Math.hypot(wx, wy) || 1;
+    const speed = 1.5 + 4 * Math.min(1.5, len);                  // meters per second
+    drift[0] += wx / len * speed * dt; drift[1] += wy / len * speed * dt;
+  }
+
+  // lightning: a double flicker every 8-25 seconds during storms
+  const t = ms / 1000;
+  let flash = 0;
+  if (weather.storm > 0.5 && !REDUCED_MOTION) {
+    if (t > nextFlashAt) { flashStart = t; nextFlashAt = t + 8 + Math.random() * 17; }
+    const s = t - flashStart;
+    flash = s < 0.07 ? 1 : s < 0.15 ? 0 : s < 0.27 ? 0.7 : 0;
+  }
+  weather.flash = flash;
+}
+
+// final color multiplier: time of day, dimmed under heavy weather
+function sceneTint() {
+  const dim = 1 - 0.08 * weather.cloud - 0.12 * weather.storm - 0.06 * weather.fog - 0.05 * weather.rain;
+  return light.tint.map(v => v * dim);
+}
+
+const wxSelect = document.getElementById("wx-select");
+function updateWeatherUI() {
+  let label, tempC, hint = "";
+  if (weatherChoice !== "real") [label, tempC] = WEATHER_PRESETS[weatherChoice];
+  else if (realWeather) ({ label, tempC, hint } = realWeather);
+  else label = weatherError ? "Weather unavailable" : "Loading weather…";
+  document.getElementById("wx-now").textContent =
+    tempC == null ? label : `${Math.round(tempC * 9 / 5 + 32)}°F · ${label}`;
+  document.getElementById("wx-hint").textContent = weatherChoice === "real" ? hint : "Preview";
+  document.getElementById("wx-credit").hidden = lightMode !== "live";
+}
+wxSelect.onchange = () => { weatherChoice = wxSelect.value; updateWeatherUI(); };
+
+// ---------- Dining ----------
+// dining.json is written by fetch_dining.py (run hourly). Each hall gets a pixel bowl pin colored by
+// whether it's open; clicking one opens its menu with dietary filters.
+const DIETS = [["VGN", "Vegan"], ["VGTN", "Vegetarian"], ["HL", "Halal"], ["KSHR", "Kosher"]];
+const TAG_BADGE = { VGN: ["VG", "Vegan"], VGTN: ["V", "Vegetarian"], HL: ["H", "Halal"], KSHR: ["K", "Kosher"],
+                    SO: ["SO", "Fried in shared oil"] };
+const STATE_ORDER = { open: 0, closing: 1, soon: 2, closed: 3 };
+const PIN_COLORS = { open: "#6cc070", closing: "#e9b949", soon: "#e9b949", closed: "#8d8680" };
+const BOWL = ["RRRRRRRRRRR", "XOOOOOOOOOX", ".XOOOOOOOX.", "..XOOOOOX..", "...XXXXX..."];
+const STEAM = [["..S...S....", "...S...S...", "..S...S...."], ["...S...S...", "..S...S....", "...S...S..."]];
+
+let dining = null, diningOpen = false, allAllergens = [];
+const diningView = { id: null, start: null };   // selected hall and meal (by start time)
+const diet = { only: [], avoid: [] };
+try { Object.assign(diet, JSON.parse(localStorage.getItem("pixelcampus.diet")) || {}); } catch {}
+const pinsCanvas = document.getElementById("pins"), pctx = pinsCanvas.getContext("2d");
+const diningEl = document.getElementById("dining"), diningBody = document.getElementById("dn-body");
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmtTime = d => d.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).replace(":00", "");
+const fmtDay = d => d.toLocaleDateString("en-US", { timeZone: TZ, weekday: "short" });
+const ymd = d => d.toLocaleDateString("en-CA", { timeZone: TZ });   // YYYY-MM-DD in Providence
+// In Live mode the time slider also drives opening hours, so you can preview dinner at noon
+function diningNow() { return lightMode === "live" && timeOverride != null ? sceneDate() : new Date(); }
+
+function initDining(d) {
+  dining = d;
+  if (!dining) return;
+  allAllergens = [...new Set(dining.locations.flatMap(l => l.meals.flatMap(m =>
+    m.stations.flatMap(s => s.items.flatMap(it => it[2])))))].sort();
+  document.getElementById("dining-btn").hidden = false;
+  setInterval(() => { if (diningOpen) renderDining(); }, 30000);   // keep open/closed text current
+}
+
+function hallStatus(loc, now = diningNow()) {
+  const t = now.getTime();
+  for (const m of loc.meals) {
+    const s = Date.parse(m.start), e = Date.parse(m.end);
+    if (s <= t && t < e) {
+      const closing = e - t < 30 * 60000;
+      return { state: closing ? "closing" : "open", meal: m, short: closing ? "closing soon" : "open",
+               text: `${closing ? "Closing soon" : "Open"} · ${m.meal} until ${fmtTime(new Date(e))}` };
+    }
+  }
+  const next = loc.meals.find(m => Date.parse(m.start) > t);
+  if (!next) return { state: "closed", short: "closed", text: "Closed" };
+  const s = new Date(next.start), soon = s - t <= 60 * 60000;
+  const when = ymd(s) === ymd(now) ? `at ${fmtTime(s)}` : `${fmtDay(s)} ${fmtTime(s)}`;
+  return { state: soon ? "soon" : "closed", meal: next, short: soon ? "opens soon" : "closed",
+           text: `${soon ? "Opens soon" : "Closed"} · ${next.meal} ${when}` };
+}
+
+// ---- Pins ----
+function pinLayout(loc) {
+  const p = view.scale < 1.2 ? 2 : 3;          // screen px per sprite pixel
+  const sx = loc.pos[0] * view.scale + view.x, sy = loc.pos[1] * view.scale + view.y;
+  const x = Math.round(sx - 7.5 * p), y = Math.round(sy - 13 * p);   // 15x11 tile + pointer, tip on the hall
+  const box = [x, y, x + 15 * p, y + 13 * p];
+  let chip = null;
+  if (view.scale >= 1.5) {                     // name chip once zoomed in a little
+    pctx.font = `700 12px "Pixelify Sans", monospace`;
+    const st = hallStatus(loc), label = `${loc.nickname ? loc.nickname.replace(/^the /, "") : loc.name} · ${st.short}`;
+    const w = pctx.measureText(label).width + 12;
+    chip = { label, x: box[2] + 4, y: y + 5.5 * p - 9, w, h: 18 };
+    box[2] = chip.x + w;
+  }
+  return { p, x, y, box, chip };
+}
+
+function visiblePins() {
+  if (!dining) return [];
+  const now = diningNow();
+  return dining.locations.filter(l => l.pos && edgeDist(...l.pos) >= FOG_DEPTH * 0.5)
+    .sort((a, b) => STATE_ORDER[hallStatus(b, now).state] - STATE_ORDER[hallStatus(a, now).state])   // open ones on top
+    .map(loc => ({ loc, ...pinLayout(loc) }))
+    .filter(g => g.box[2] > 0 && g.box[3] > 0 && g.box[0] < innerWidth && g.box[1] < innerHeight);
+}
+
+function pinAt(sx, sy) {
+  return visiblePins().find(g => sx >= g.box[0] && sx <= g.box[2] && sy >= g.box[1] && sy <= g.box[3]);
+}
+
+function drawPins(ms) {
+  pctx.clearRect(0, 0, innerWidth, innerHeight);
+  if (!dining) return;
+  const frame = REDUCED_MOTION ? 0 : Math.floor(ms / 450) % 2, now = diningNow();
+  for (const g of visiblePins()) {
+    const st = hallStatus(g.loc, now), col = PIN_COLORS[st.state], p = g.p;
+    const rect = (x, y, w, h, c) => { pctx.fillStyle = c; pctx.fillRect(g.x + x * p, g.y + y * p, w * p, h * p); };
+    const live = st.state === "open" || st.state === "closing";
+
+    if (live && light.night > 0.3) {             // open halls glow after dark
+      pctx.fillStyle = `rgba(255, 196, 110, ${0.22 * light.night})`;
+      pctx.fillRect(g.x - 3 * p, g.y - 3 * p, 21 * p, 19 * p);
+    }
+    // drop shadow down-right, matching the map's light from the top-left
+    rect(2, 1, 13, 11, "rgba(10,8,20,0.28)"); rect(1, 2, 15, 9, "rgba(10,8,20,0.28)"); rect(7, 12, 3, 1, "rgba(10,8,20,0.28)");
+    // tile: status-colored frame with notched corners, dark inside, pointer below
+    rect(1, 0, 13, 11, col); rect(0, 1, 15, 9, col);
+    rect(1, 1, 13, 9, "#1c1a18");
+    rect(6, 11, 3, 1, col); rect(7, 12, 1, 1, col);
+    if (diningOpen && diningView.id === g.loc.id) {   // selected: accent ring
+      pctx.strokeStyle = "#e07a55"; pctx.lineWidth = p;
+      pctx.strokeRect(g.x - 1.5 * p, g.y - 1.5 * p, 18 * p, 14 * p);
+    }
+    // bowl
+    BOWL.forEach((row, r) => [...row].forEach((ch, c) => {
+      if (ch === ".") return;
+      rect(2 + c, 4 + r, 1, 1, ch === "R" ? "#f4efe6" : ch === "O" ? col : "#b8b0a2");
+    }));
+    // steam while serving
+    if (live) STEAM[frame].forEach((row, r) => [...row].forEach((ch, c) => {
+      if (ch === "S") rect(2 + c, 1 + r, 1, 1, "rgba(244,239,230,0.85)");
+    }));
+    if (g.chip) {
+      const { x, y, w, h, label } = g.chip;
+      pctx.fillStyle = "rgba(28,26,24,0.85)"; pctx.fillRect(x, y, w, h);
+      pctx.fillStyle = col; pctx.fillRect(x, y, 3, h);
+      pctx.fillStyle = "#f4efe6"; pctx.textBaseline = "middle"; pctx.textAlign = "left";
+      pctx.fillText(label, x + 8, y + h / 2 + 1);
+    }
+  }
+}
+
+// ---- Panel ----
+function setDiningOpen(open) {
+  diningOpen = open;
+  diningEl.hidden = !open;
+  document.body.classList.toggle("dining-open", open);
+  document.getElementById("dining-btn").setAttribute("aria-pressed", open);
+  if (open) renderDining();
+  requestDraw();
+}
+
+function openHall(id) {
+  const loc = dining.locations.find(l => l.id === id);
+  const st = hallStatus(loc);
+  diningView.id = id;
+  diningView.start = st.meal ? st.meal.start : loc.meals[0]?.start || null;   // current or next meal
+  setDiningOpen(true);
+  if (loc.pos) flyTo(loc.pos[0], loc.pos[1], Math.max(view.scale, 2.6));
+}
+
+function itemVisible(it) {
+  const [, tags, allergens] = it;
+  for (const d of diet.only) {
+    if (d === "VGTN" ? !(tags.includes("VGTN") || tags.includes("VGN")) : !tags.includes(d)) return false;
+  }
+  return !diet.avoid.some(a => allergens.includes(a));
+}
+
+function renderDining() {
+  if (!dining) return;
+  const now = diningNow();
+  if (!diningView.id) {
+    const rows = dining.locations.map(l => ({ l, st: hallStatus(l, now) }))
+      .sort((a, b) => STATE_ORDER[a.st.state] - STATE_ORDER[b.st.state] || a.l.name.localeCompare(b.l.name));
+    const updated = Math.round((Date.now() - Date.parse(dining.fetched_at)) / 3600000);
+    diningBody.innerHTML = `
+      <div class="dn-head"><h2>Dining</h2><button data-act="close" aria-label="Close">✕</button></div>
+      <ul class="dn-list">${rows.map(({ l, st }) => `
+        <li><button data-act="hall" data-id="${esc(l.id)}">
+          <span class="dot" style="background:${PIN_COLORS[st.state]}"></span>
+          <span class="nm">${esc(l.name)}${l.nickname ? ` <small>${esc(l.nickname)}</small>` : ""}</span>
+          <span class="st">${esc(st.text)}</span></button></li>`).join("")}</ul>
+      <p class="dn-foot">Menus from <a href="https://menus.dining.brown.edu/" target="_blank" rel="noopener">Brown Dining</a>
+        · synced ${updated < 1 ? "within the hour" : updated < 48 ? `${updated}h ago` : `${Math.round(updated / 24)} days ago`}</p>`;
+    return;
+  }
+
+  const loc = dining.locations.find(l => l.id === diningView.id), st = hallStatus(loc, now);
+  const dates = [...new Set(loc.meals.map(m => m.date))];
+  let meal = loc.meals.find(m => m.start === diningView.start) || loc.meals[0];
+  const dayMeals = meal ? loc.meals.filter(m => m.date === meal.date) : [];
+  const dayLabel = d => d === ymd(now) ? "Today" : new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+  const hours = m => `${fmtTime(new Date(m.start))}–${fmtTime(new Date(m.end))}`;
+  const chip = (act, val, on, text, title = "") =>
+    `<button class="chip${on ? " on" : ""}" data-act="${act}" data-v="${esc(val)}" aria-pressed="${on}"${title ? ` title="${esc(title)}"` : ""}>${esc(text)}</button>`;
+
+  let shown = 0;
+  const stations = meal ? meal.stations.map(s => {
+    const items = s.items.filter(itemVisible);
+    shown += items.length;
+    if (!items.length) return "";
+    return `<section><h4>${esc(s.name)}</h4><ul>${items.map(([name, tags, allergens]) => `
+      <li><span>${esc(name)}</span>${tags.map(t => TAG_BADGE[t] ?
+        `<b class="tag tag-${esc(t)}" title="${esc(TAG_BADGE[t][1])}">${esc(TAG_BADGE[t][0])}</b>` : "").join("")}
+      ${allergens.length ? `<small>${esc(allergens.join(", ").toLowerCase())}</small>` : ""}</li>`).join("")}</ul></section>`;
+  }).join("") : "";
+
+  diningBody.innerHTML = `
+    <div class="dn-head"><button data-act="back" aria-label="All dining halls">‹</button>
+      <h2>${esc(loc.name)}</h2><button data-act="close" aria-label="Close">✕</button></div>
+    <p class="dn-status"><span class="dot" style="background:${PIN_COLORS[st.state]}"></span>${esc(st.text)}</p>
+    <p class="dn-addr">${esc(loc.address || "")}</p>
+    <div class="chips">${dates.map(d => chip("date", d, meal && meal.date === d, dayLabel(d))).join("")}</div>
+    <div class="chips">${dayMeals.map(m => chip("meal", m.start, m === meal, `${m.meal} ${hours(m)}`)).join("")}</div>
+    <details class="filters"${diet.only.length || diet.avoid.length ? " open" : ""}>
+      <summary>Dietary filters${diet.only.length + diet.avoid.length ? ` (${diet.only.length + diet.avoid.length})` : ""}</summary>
+      <div class="lbl">Only show</div>
+      <div class="chips">${DIETS.map(([k, n]) => chip("only", k, diet.only.includes(k), n)).join("")}</div>
+      <div class="lbl">Avoid</div>
+      <div class="chips">${allAllergens.map(a => chip("avoid", a, diet.avoid.includes(a), a.toLowerCase())).join("")}</div>
+    </details>
+    <div class="menu">${meal ? (shown ? stations : `<p class="empty">Nothing on this menu matches your filters.</p>`)
+                              : `<p class="empty">No menu posted for the next few days.</p>`}</div>`;
+}
+
+diningBody.addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const act = b.dataset.act, v = b.dataset.v;
+  const loc = dining.locations.find(l => l.id === diningView.id);
+  if (act === "close") return setDiningOpen(false);
+  if (act === "back") diningView.id = null;
+  else if (act === "hall") return openHall(b.dataset.id);
+  else if (act === "date") diningView.start = loc.meals.find(m => m.date === v)?.start;
+  else if (act === "meal") diningView.start = v;
+  else if (act === "only" || act === "avoid") {
+    const list = diet[act], i = list.indexOf(v);
+    i >= 0 ? list.splice(i, 1) : list.push(v);
+    try { localStorage.setItem("pixelcampus.diet", JSON.stringify(diet)); } catch {}
+  }
+  renderDining();
+  requestDraw();
+});
+document.getElementById("dining-btn").onclick = () => setDiningOpen(!diningOpen);
+addEventListener("keydown", e => { if (e.key === "Escape" && diningOpen) setDiningOpen(false); });
+
+// smooth camera move to a world point
+function flyTo(wx, wy, scale) {
+  const from = { ...view }, t0 = performance.now(), dur = 450;
+  const cx = innerWidth / 2 + (diningOpen && innerWidth > 760 ? 180 : 0);   // keep clear of the panel
+  const cy = innerWidth > 760 ? innerHeight / 2 : innerHeight * 0.3;
+  const to = { scale };
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    // interpolate in log-scale so zooming feels even
+    view.scale = from.scale * Math.pow(to.scale / from.scale, e);
+    const fx = (cx - from.x) / from.scale, fy = (cy - from.y) / from.scale;   // world point at screen center, start
+    const wxNow = fx + (wx - fx) * e, wyNow = fy + (wy - fy) * e;
+    view.x = cx - wxNow * view.scale; view.y = cy - wyNow * view.scale;
+    requestDraw();
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ---------- Frame loop ----------
+// The map animates every frame; labels live on a separate 2D canvas and only redraw when the view changes.
+let labelsDirty = true, frameCount = 0;
+const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function requestDraw() { labelsDirty = true; }
+
+function render(ms) {
+  requestAnimationFrame(render);
+  if (!meta || !gl) return;
+  const time = REDUCED_MOTION ? 0 : ms / 1000, dpr = window.devicePixelRatio || 1;
+  gl.viewport(0, 0, mapCanvas.width, mapCanvas.height);
+  updateLighting(ms);
+  updateWeather(ms);
+  const tint = sceneTint(), ct = tint.map(v => v * 0.8 + 0.2);
+  gl.clearColor(0.97 * ct[0], 0.96 * ct[1], 0.93 * ct[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.useProgram(tileProg.p);
+  const u = tileProg.u;
+  gl.uniform2f(u.uRes, mapCanvas.width, mapCanvas.height);
+  gl.uniform1f(u.uTime, time);
+  gl.uniform1iv(u.uKind, CLASS_KIND); gl.uniform3fv(u.uPalette, CLASS_COLOR);
+  gl.uniform3fv(u.uTint, tint); gl.uniform1f(u.uNight, light.night);
+  gl.uniform1f(u.uCloud, weather.cloud); gl.uniform1f(u.uWet, weather.wet); gl.uniform1f(u.uRain, weather.rain);
+  gl.uniform1f(u.uSnowCover, weather.snowCover); gl.uniform1f(u.uIce, weather.ice); gl.uniform2fv(u.uDrift, drift);
+  gl.uniform1i(u.uColor, 0); gl.uniform1i(u.uGrid, 1);
+  const cur = currentLevel();
+  // Coarser levels first as a backdrop while finer tiles stream in
+  for (const L of meta.levels) {
+    drawLevel(L, L === cur || L === meta.levels[0], time);
+    if (L === cur) break;
+  }
+
+  gl.useProgram(fogProg.p);
+  const f = fogProg.u;
+  gl.uniform2f(f.uRes, mapCanvas.width, mapCanvas.height);
+  gl.uniform2f(f.uView, view.x, view.y);
+  gl.uniform1f(f.uDpr, dpr); gl.uniform1f(f.uScale, view.scale); gl.uniform1f(f.uSize, meta.size_m);
+  gl.uniform1f(f.uTime, time); gl.uniform1f(f.uBlock, FOG_BLOCK); gl.uniform3fv(f.uTint, tint);
+  gl.uniform1f(f.uCloud, weather.cloud); gl.uniform1f(f.uFog, weather.fog); gl.uniform1f(f.uRain, weather.rain);
+  gl.uniform1f(f.uSnow, weather.snow); gl.uniform1f(f.uStorm, weather.storm); gl.uniform1f(f.uFlash, weather.flash);
+  gl.uniform2fv(f.uDrift, drift); gl.uniform2f(f.uWind, weather.windX, weather.windY);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // fog pass outputs premultiplied alpha
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.disable(gl.BLEND);
+
+  if (labelsDirty) {
+    labelsDirty = false;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    if (showLabels) drawLabels();
+    updateDetail(cur);
+  }
+  drawPins(ms);
+  if (++frameCount % 120 === 0) freeOldTextures();
+}
+requestAnimationFrame(render);
+
+function updateDetail(cur) {
+  const i = meta.levels.indexOf(cur);
+  document.querySelectorAll("#detail .pip").forEach((p, j) => p.classList.toggle("on", j <= i));
+  document.querySelector("#detail .lbl").textContent = `${cur.mpp} m / pixel`;
+}
+
+// distance (meters) from a world point to the cloud edge; matches coverage() in the fog shader
+function edgeDist(wx, wy) {
+  const S = meta.size_m;
+  return Math.min(wx, S - wx, wy, S - wy, S * 0.6 - Math.hypot(wx - S / 2, wy - S / 2));
+}
+
+function drawLabels() {
+  const placed = [];
+  const fits = box => box[0] > 4 && box[1] > 4 && box[2] < innerWidth - 4 && box[3] < innerHeight - 4
+    && !placed.some(p => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1]);
+  const onScreen = (sx, sy) => sx > -50 && sy > -20 && sx < innerWidth + 50 && sy < innerHeight + 20;
+  // keep labels clear of the UI panels
+  for (const el of document.querySelectorAll(".panel")) {
+    const r = el.getBoundingClientRect(); if (r.width) placed.push([r.left, r.top, r.right, r.bottom]);
+  }
+  for (const g of visiblePins()) placed.push(g.box);   // dining pins win over labels
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+
+  // Buildings: campus first (they're sorted biggest first), shown once the name roughly fits the footprint
+  const bSize = Math.round(Math.min(16, 11 + view.scale * 0.6));
+  ctx.font = `700 ${bSize}px "Pixelify Sans", monospace`;
+  for (const pass of [true, false]) {
+    if (!pass && view.scale < 4) break;
+    for (const b of buildings) {
+      if (b.campus !== pass || view.scale < 1.8 || edgeDist(...b.center) < FOG_DEPTH) continue;
+      const sx = b.center[0] * view.scale + view.x, sy = b.center[1] * view.scale + view.y;
+      if (!onScreen(sx, sy)) continue;
+      const w = ctx.measureText(b.name).width + 10;
+      if (w > (b.bbox[2] - b.bbox[0]) * view.scale * 1.8) continue;
+      const box = [sx - w / 2, sy - bSize * 0.75, sx + w / 2, sy + bSize * 0.75];
+      if (!fits(box)) continue;
+      placed.push(box);
+      ctx.fillStyle = "rgba(28,26,24,0.82)"; ctx.fillRect(box[0], box[1], w, box[3] - box[1]);
+      ctx.fillStyle = b.campus ? "#ffd9c7" : "#f4efe6"; ctx.fillText(b.name, sx, sy + 1);
+    }
+  }
+
+  // Streets: rotated along their longest on-screen segment, repeated at most every ~400px
+  const sSize = Math.round(Math.min(15, 10 + view.scale * 0.5));
+  ctx.font = `700 ${sSize}px "Pixelify Sans", monospace`;
+  ctx.lineWidth = 3;
+  for (const s of streets) {
+    if (view.scale < STREET_MIN_SCALE[s.rank]) continue;
+    const tw = ctx.measureText(s.name).width;
+    const segs = [];
+    for (const line of s.lines) for (let i = 1; i < line.length; i++) {
+      const ax = line[i - 1][0] * view.scale + view.x, ay = line[i - 1][1] * view.scale + view.y;
+      const bx = line[i][0] * view.scale + view.x, by = line[i][1] * view.scale + view.y;
+      const len = Math.hypot(bx - ax, by - ay), mx = (ax + bx) / 2, my = (ay + by) / 2;
+      if (len > tw + 16 && onScreen(mx, my) && edgeDist(...toWorld(mx, my)) >= FOG_DEPTH) segs.push({ len, mx, my, ang: Math.atan2(by - ay, bx - ax) });
+    }
+    segs.sort((a, b) => b.len - a.len);
+    const mine = [];
+    for (const g of segs) {
+      if (mine.some(m => Math.hypot(m.mx - g.mx, m.my - g.my) < 400)) continue;
+      let ang = g.ang;
+      if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;   // keep text upright
+      const hw = (Math.abs(Math.cos(ang)) * tw + Math.abs(Math.sin(ang)) * sSize) / 2 + 2;
+      const hh = (Math.abs(Math.sin(ang)) * tw + Math.abs(Math.cos(ang)) * sSize) / 2 + 2;
+      const box = [g.mx - hw, g.my - hh, g.mx + hw, g.my + hh];
+      if (!fits(box)) continue;
+      placed.push(box); mine.push(g);
+      ctx.save(); ctx.translate(g.mx, g.my); ctx.rotate(ang);
+      ctx.strokeStyle = "rgba(30,28,34,0.9)"; ctx.strokeText(s.name, 0, 1);
+      ctx.fillStyle = "#ffffff"; ctx.fillText(s.name, 0, 1);
+      ctx.restore();
+    }
+  }
+}
+
+// ---------- View ----------
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  for (const c of [canvas, mapCanvas, pinsCanvas]) { c.width = innerWidth * dpr; c.height = innerHeight * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (meta && !fitted) reset(); else requestDraw();
+}
+function reset() {
+  fitted = innerWidth > 0;   // the page may load while hidden; fit again once it has a size
+  view.scale = Math.min(innerWidth, innerHeight) / meta.size_m * 1.15;
+  view.x = innerWidth / 2 - meta.size_m / 2 * view.scale;
+  view.y = innerHeight / 2 - meta.size_m / 2 * view.scale;
+  requestDraw();
+}
+function toWorld(sx, sy) { return [(sx - view.x) / view.scale, (sy - view.y) / view.scale]; }
+function zoomAt(sx, sy, factor) {
+  const ns = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * factor));
+  view.x = sx - (sx - view.x) * ns / view.scale;
+  view.y = sy - (sy - view.y) * ns / view.scale;
+  view.scale = ns; requestDraw();
+}
+
+// ---------- Hover ----------
+function inPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function tileClassAt(wx, wy) {
+  // read the tile class from the current level's grid tile (loaded on demand)
+  const L = currentLevel(), px = Math.floor(wx / L.mpp), py = Math.floor(wy / L.mpp);
+  if (px < 0 || py < 0 || px >= L.size_px || py >= L.size_px) return null;
+  const tx = Math.floor(px / meta.tile_px), ty = Math.floor(py / meta.tile_px);
+  const t = tile(L, tx, ty, "grid_");
+  if (!t.ready) return "…";
+  if (!t.data) {
+    const c = document.createElement("canvas"); c.width = t.img.width; c.height = t.img.height;
+    const cc = c.getContext("2d"); cc.drawImage(t.img, 0, 0);
+    t.data = cc.getImageData(0, 0, c.width, c.height);
+  }
+  const v = t.data.data[((py % meta.tile_px) * t.data.width + (px % meta.tile_px)) * 4];
+  return meta.classes[v]?.name;
+}
+
+function hover(sx, sy) {
+  lastHover = [sx, sy];
+  const pin = pinAt(sx, sy);
+  canvas.style.cursor = pin ? "pointer" : "";
+  if (pin) {
+    tip.innerHTML = `${esc(pin.loc.name)}<br><small>${esc(hallStatus(pin.loc).text)}</small>`;
+    tip.style.display = "block";
+    tip.style.left = Math.min(sx + 14, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = sy + 14 + "px";
+    return;
+  }
+  const [wx, wy] = toWorld(sx, sy);
+  if (edgeDist(wx, wy) < FOG_DEPTH * 0.7) { tip.style.display = "none"; return; }
+  const b = buildings.find(b => wx >= b.bbox[0] && wx <= b.bbox[2] && wy >= b.bbox[1] && wy <= b.bbox[3]
+    && b.polygons.some(p => inPoly(wx, wy, p)));
+  if (b) tip.innerHTML = `${b.name}<br><small>${b.campus ? "campus building" : "building"}</small>`;
+  else {
+    const cls = tileClassAt(wx, wy);
+    tip.innerHTML = `<small>${NICE[cls] || cls} · ${Math.round(wx)}, ${Math.round(wy)} m</small>`;
+  }
+  tip.style.display = "block";
+  tip.style.left = Math.min(sx + 14, innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = sy + 14 + "px";
+}
+
+// ---------- Input: drag to pan, wheel / pinch to zoom ----------
+const pointers = new Map(); let lastPinch = null;
+canvas.addEventListener("pointerdown", e => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, e); canvas.classList.add("dragging"); });
+canvas.addEventListener("pointermove", e => {
+  const prev = pointers.get(e.pointerId);
+  if (!prev) { if (meta) hover(e.clientX, e.clientY); return; }
+  if (pointers.size === 1) { view.x += e.clientX - prev.clientX; view.y += e.clientY - prev.clientY; requestDraw(); }
+  pointers.set(e.pointerId, e);
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    if (lastPinch) zoomAt((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2, d / lastPinch);
+    lastPinch = d;
+  }
+  tip.style.display = "none";
+});
+const up = e => { pointers.delete(e.pointerId); lastPinch = null; if (!pointers.size) canvas.classList.remove("dragging"); };
+canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
+// a click (press and release without dragging) on a dining pin opens that hall's menu
+let pressAt = null;
+canvas.addEventListener("pointerdown", e => { pressAt = [e.clientX, e.clientY]; });
+canvas.addEventListener("pointerup", e => {
+  if (!pressAt || Math.hypot(e.clientX - pressAt[0], e.clientY - pressAt[1]) > 5) return;
+  const pin = pinAt(e.clientX, e.clientY);
+  if (pin) openHall(pin.loc.id);
+});
+canvas.addEventListener("pointerleave", () => { tip.style.display = "none"; lastHover = null; });
+canvas.addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+
+document.getElementById("reset").onclick = reset;
+document.getElementById("labels").onclick = e => {
+  showLabels = !showLabels; e.target.setAttribute("aria-pressed", showLabels); requestDraw();
+};
+addEventListener("resize", resize);
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+{
+ "size_m": 1800,
+ "center": {
+  "lat": 41.8268,
+  "lon": -71.4025
+ },
+ "tile_px": 512,
+ "levels": [
+  {
+   "mpp": 4.0,
+   "size_px": 450,
+   "tiles": 1,
+   "dir": "levels/4"
+  },
+  {
+   "mpp": 2.0,
+   "size_px": 900,
+   "tiles": 2,
+   "dir": "levels/2"
+  },
+  {
+   "mpp": 1.0,
+   "size_px": 1800,
+   "tiles": 4,
+   "dir": "levels/1"
+  },
+  {
+   "mpp": 0.5,
+   "size_px": 3600,
+   "tiles": 8,
+   "dir": "levels/0.5"
+  }
+ ],
+ "classes": [
+  {
+   "id": 0,
+   "name": "ground",
+   "color": "#b9c98c"
+  },
+  {
+   "id": 1,
+   "name": "grass",
+   "color": "#86ba5c"
+  },
+  {
+   "id": 2,
+   "name": "trees",
+   "color": "#4f8f3f"
+  },
+  {
+   "id": 3,
+   "name": "water",
+   "color": "#4a8fd1"
+  },
+  {
+   "id": 4,
+   "name": "sand",
+   "color": "#e2cf92"
+  },
+  {
+   "id": 5,
+   "name": "pitch",
+   "color": "#5fae4f"
+  },
+  {
+   "id": 6,
+   "name": "track",
+   "color": "#c0624a"
+  },
+  {
+   "id": 7,
+   "name": "parking",
+   "color": "#a3a3a6"
+  },
+  {
+   "id": 8,
+   "name": "plaza",
+   "color": "#d9cfbb"
+  },
+  {
+   "id": 9,
+   "name": "road",
+   "color": "#6c6c75"
+  },
+  {
+   "id": 10,
+   "name": "path",
+   "color": "#e8d8aa"
+  },
+  {
+   "id": 11,
+   "name": "rail",
+   "color": "#5a5050"
+  },
+  {
+   "id": 12,
+   "name": "building",
+   "color": "#b9ab9b"
+  },
+  {
+   "id": 13,
+   "name": "campus_bldg",
+   "color": "#bf5b3f"
+  },
+  {
+   "id": 14,
+   "name": "bldg_edge",
+   "color": "#5e3b2e"
+  },
+  {
+   "id": 15,
+   "name": "tree",
+   "color": "#3a7330"
+  },
+  {
+   "id": 16,
+   "name": "sidewalk",
+   "color": "#cfc8b8"
+  },
+  {
+   "id": 17,
+   "name": "crosswalk",
+   "color": "#eeeeea"
+  },
+  {
+   "id": 18,
+   "name": "road_mark",
+   "color": "#e9cf6a"
+  }
+ ]
+}
