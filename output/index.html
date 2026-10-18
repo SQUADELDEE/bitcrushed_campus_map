@@ -83,6 +83,14 @@
     #legend { display: none; } #title p { display: none; }
     #detail { bottom: 44px; } #attrib { font-size: 11px; }
   }
+  /* Phones: title and controls no longer fit side by side, so the controls drop to a full-width row */
+  @media (max-width: 560px) {
+    #title { top: 8px; left: 8px; padding: 6px 10px; }
+    #title h1 { font-size: 15px; margin: 0; }
+    #controls { top: 48px; left: 8px; right: 8px; padding: 6px; }
+    #controls button { flex: 1; padding: 6px 4px; }
+    #clock { top: 100px; left: 8px; right: 8px; width: auto; }
+  }
 </style>
 </head>
 <body>
