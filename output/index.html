@@ -655,8 +655,11 @@ function updateClock(elev) {
   const date = sceneDate();
   document.getElementById("clock-time").textContent = "Providence " +
     date.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+  // the same sun height happens twice a day; whether it's climbing tells morning from evening
+  const rising = sunElevation(new Date(date.getTime() + 10 * 60e3), meta.center.lat, meta.center.lon) > elev;
   document.getElementById("clock-phase").textContent =
-    elev > 12 ? "Day" : elev > 2 ? "Golden hour" : elev > -2 ? "Sunset" : elev > -8 ? "Dusk" : "Night";
+    elev > 12 ? "Day" : elev > 2 ? "Golden hour" : elev > -2 ? (rising ? "Sunrise" : "Sunset")
+    : elev > -8 ? (rising ? "Dawn" : "Dusk") : "Night";
   if (timeOverride == null && document.activeElement !== slider) slider.value = providenceMinutes(date);
   document.getElementById("clock-now").disabled = timeOverride == null;
 }
