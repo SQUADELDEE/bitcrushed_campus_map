@@ -8,3 +8,6 @@ output/.osm_cache/
 # Local editor / tool settings
 .claude/
 .DS_Store
+
+# local Postgres used by supabase/test_schema.py
+.pgtest/
