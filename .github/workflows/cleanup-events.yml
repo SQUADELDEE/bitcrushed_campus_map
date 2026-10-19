@@ -1,0 +1,30 @@
+# Deletes expired events and their flyer files once a day (see cleanup_events.py).
+# Needs the repo secret SUPABASE_SERVICE_ROLE_KEY. A manual run from the Actions tab defaults to a dry run,
+# which only reports what it would delete.
+name: Clean up expired events
+
+on:
+  schedule:
+    - cron: "0 8 * * *"     # 08:00 UTC = 4 AM Providence in summer, 3 AM in winter
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report what would be deleted"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Clean up
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 cleanup_events.py ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
