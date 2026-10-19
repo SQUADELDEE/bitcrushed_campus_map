@@ -673,8 +673,8 @@ function setLightMode(mode) {
   if (meta && typeof updateWeatherUI === "function") { updateWeatherUI(); if (mode === "live") weatherFetchedAt = 0; }
 }
 document.getElementById("lighting").onclick = () => setLightMode(lightMode === "live" ? "classic" : "live");
-slider.oninput = () => { timeOverride = +slider.value; updateLighting.uiAt = 0; };
-document.getElementById("clock-now").onclick = () => { timeOverride = null; updateLighting.uiAt = 0; };
+slider.oninput = () => { timeOverride = +slider.value; updateLighting.uiAt = 0; updateWeatherUI(); };
+document.getElementById("clock-now").onclick = () => { timeOverride = null; updateLighting.uiAt = 0; updateWeatherUI(); };
 setLightMode(lightMode);
 
 // ---------- Weather ----------
@@ -707,13 +707,18 @@ const weather = { ...CALM };                       // eased values the shaders s
 let weatherChoice = "real", realWeather = null, weatherFetchedAt = 0, weatherError = false;
 let drift = [0, 0], lastWeatherMs = 0, flashStart = -1, nextFlashAt = 0;
 
+// Hourly values cover yesterday through tomorrow, so the time slider can show the weather for any hour today
+const HOURLY_FIELDS = "temperature_2m,weather_code,precipitation,snowfall,cloud_cover,wind_speed_10m," +
+  "wind_direction_10m,visibility,snow_depth";
+
 async function fetchWeather() {
   weatherFetchedAt = Date.now();
   const { lat, lon } = meta.center;
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     "&current=temperature_2m,weather_code,precipitation,rain,snowfall,cloud_cover,wind_speed_10m," +
     "wind_direction_10m,visibility,snow_depth&minutely_15=precipitation,snowfall" +
-    "&past_minutely_15=4&forecast_minutely_15=9&timezone=America%2FNew_York";
+    "&past_minutely_15=4&forecast_minutely_15=9" +
+    `&hourly=${HOURLY_FIELDS}&past_days=1&forecast_days=2&timezone=America%2FNew_York`;
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
@@ -726,17 +731,34 @@ async function fetchWeather() {
   updateWeatherUI();
 }
 
-function parseWeather(j) {
-  const cur = j.current, code = cur.weather_code, [label, intensity0] = WMO[code] || ["Unknown", 0];
-  const m = j.minutely_15, now = m.time.indexOf(cur.time);
-  const mmPerHour = (cur.precipitation || 0) * 4;   // current value is the last 15 minutes
+// One set of conditions (now, or one forecast hour) -> the 0..1 values the shaders use.
+// mmPerHour = precipitation rate; recentMm = rain in the hour before, which keeps the ground wet after it stops.
+function weatherState(c, mmPerHour, recentMm) {
+  const code = c.weather_code, intensity0 = (WMO[code] || ["", 0])[1];
   const intensity = Math.max(intensity0, Math.min(1, mmPerHour / 6));
-  const snowing = SNOW_CODES.has(code) || cur.snowfall > 0;
+  const snowing = SNOW_CODES.has(code) || c.snowfall > 0;
   const precip = code >= 51 && intensity > 0;
+  const freezing = c.temperature_2m <= 0;
+  const fog = code === 45 || code === 48 ? 0.85 : Math.max(0, Math.min(0.85, (4000 - (c.visibility ?? 40000)) / 3500));
+  const toward = (c.wind_direction_10m + 180) * Math.PI / 180, strength = Math.min(1.5, c.wind_speed_10m / 25);
+  return {
+    cloud: Math.max(c.cloud_cover / 100, precip ? 0.85 : 0, fog * 0.8),
+    rain: precip && !snowing ? intensity : 0,
+    wet: freezing ? 0 : precip && !snowing ? 1 : Math.min(1, recentMm / 1.0),
+    snow: snowing ? intensity : 0,
+    snowCover: Math.max(Math.min(1, (c.snow_depth || 0) / 0.08), snowing ? 0.35 : 0),
+    fog, storm: code >= 95 ? 1 : 0,
+    ice: Math.max(0, Math.min(1, (-6 - c.temperature_2m) / 8)),
+    windX: Math.sin(toward) * strength, windY: -Math.cos(toward) * strength,   // screen: +x east, +y south
+  };
+}
+
+function parseWeather(j) {
+  const cur = j.current, [label] = WMO[cur.weather_code] || ["Unknown", 0];
+  const m = j.minutely_15, now = m.time.indexOf(cur.time);
   const recent = m.precipitation.slice(0, Math.max(0, now)).reduce((a, b) => a + (b || 0), 0);   // last hour
-  const freezing = cur.temperature_2m <= 0;
-  const fog = code === 45 || code === 48 ? 0.85 : Math.max(0, Math.min(0.85, (4000 - (cur.visibility ?? 40000)) / 3500));
-  const toward = (cur.wind_direction_10m + 180) * Math.PI / 180, strength = Math.min(1.5, cur.wind_speed_10m / 25);
+  const state = weatherState(cur, (cur.precipitation || 0) * 4, recent);   // current value is the last 15 minutes
+  const precip = state.rain > 0 || state.snow > 0, freezing = cur.temperature_2m <= 0;
 
   // forecast hint: precipitation starting or stopping within the next two hours
   let hint = "";
@@ -747,24 +769,33 @@ function parseWeather(j) {
       if (precip && !wetSoon) { hint = `Easing in ~${mins} min`; break; }
     }
   }
-  return {
-    label, tempC: cur.temperature_2m, hint,
-    state: {
-      cloud: Math.max(cur.cloud_cover / 100, precip ? 0.85 : 0, fog * 0.8),
-      rain: precip && !snowing ? intensity : 0,
-      wet: freezing ? 0 : precip && !snowing ? 1 : Math.min(1, recent / 1.0),
-      snow: snowing ? intensity : 0,
-      snowCover: Math.max(Math.min(1, (cur.snow_depth || 0) / 0.08), snowing ? 0.35 : 0),
-      fog, storm: code >= 95 ? 1 : 0,
-      ice: Math.max(0, Math.min(1, (-6 - cur.temperature_2m) / 8)),
-      windX: Math.sin(toward) * strength, windY: -Math.cos(toward) * strength,   // screen: +x east, +y south
-    },
-  };
+  return { label, tempC: cur.temperature_2m, hint, state, hourly: j.hourly };
+}
+
+// Weather for any moment the hourly data covers, blended smoothly between the hours on either side.
+// Returns null outside that range, and the conditions label comes from the nearer hour.
+function weatherAt(date) {
+  const h = realWeather?.hourly;
+  if (!h) return null;
+  const p = tzParts(date), pad = n => String(n).padStart(2, "0");
+  const i = h.time.indexOf(`${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:00`);
+  if (i < 0) return null;
+  const j = Math.min(i + 1, h.time.length - 1), f = p.minute / 60;
+  const hourAt = k => Object.fromEntries(HOURLY_FIELDS.split(",").map(key => [key, h[key][k]]));
+  const stateAt = k => weatherState(hourAt(k), h.precipitation[k] || 0, h.precipitation[k - 1] || 0);
+  const a = stateAt(i), b = stateAt(j), state = {};
+  for (const key in a) state[key] = a[key] + (b[key] - a[key]) * f;
+  const t = h.temperature_2m;
+  return { state, tempC: t[i] + (t[j] - t[i]) * f, label: (WMO[h.weather_code[f < 0.5 ? i : j]] || ["Unknown"])[0] };
 }
 
 function weatherTarget() {
   if (lightMode !== "live") return { ...CALM };
   if (weatherChoice !== "real") return WEATHER_PRESETS[weatherChoice][2];
+  if (timeOverride != null) {               // the time slider is moved: that hour's weather
+    const w = weatherAt(sceneDate());
+    if (w) return w.state;
+  }
   return realWeather ? realWeather.state : { ...CALM };
 }
 
@@ -802,7 +833,12 @@ function sceneTint() {
 const wxSelect = document.getElementById("wx-select");
 function updateWeatherUI() {
   let label, tempC, hint = "";
+  const at = weatherChoice === "real" && timeOverride != null ? weatherAt(sceneDate()) : null;
   if (weatherChoice !== "real") [label, tempC] = WEATHER_PRESETS[weatherChoice];
+  else if (at) {                            // the slider's hour: say plainly it's a forecast or an estimate
+    ({ label, tempC } = at);
+    hint = sceneDate() > Date.now() ? "Forecast" : "Earlier today";
+  }
   else if (realWeather) ({ label, tempC, hint } = realWeather);
   else label = weatherError ? "Weather unavailable" : "Loading weather…";
   document.getElementById("wx-now").textContent =
