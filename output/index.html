@@ -158,6 +158,7 @@ Promise.all([
 ]).then(([m, b, s, d]) => {
   meta = m; buildings = b; streets = s;
   initDining(d);
+  layoutPanels();
   for (const c of meta.classes) {
     CLS[c.name] = c.id;
     CLASS_KIND[c.id] = KIND_OF[c.name] || 0;
@@ -937,9 +938,24 @@ function drawPins(ms) {
 }
 
 // ---- Panel ----
+// Panels that hang below the title card or the button row are placed from those elements' real size,
+// which changes with browser zoom, font loading and screen width, rather than a fixed offset.
+function layoutPanels() {
+  const below = id => Math.round(document.getElementById(id).getBoundingClientRect().bottom) + 8;
+  clockEl.style.top = below("controls") + "px";
+  if (innerWidth > 760) {                      // on phones the dining panel is a bottom sheet instead
+    const top = below("title");
+    diningEl.style.top = top + "px";
+    diningEl.style.maxHeight = Math.max(160, innerHeight - top - 64) + "px";   // clear of the zoom badge
+  } else {
+    diningEl.style.top = diningEl.style.maxHeight = "";
+  }
+}
+
 function setDiningOpen(open) {
   diningOpen = open;
   diningEl.hidden = !open;
+  if (open) layoutPanels();
   document.body.classList.toggle("dining-open", open);
   document.getElementById("dining-btn").setAttribute("aria-pressed", open);
   if (open) renderDining();
@@ -978,7 +994,7 @@ function renderDining() {
           <span class="nm">${esc(l.name)}${l.nickname ? ` <small>${esc(l.nickname)}</small>` : ""}</span>
           <span class="st">${esc(st.text)}</span></button></li>`).join("")}</ul>
       <p class="dn-foot">Menus from <a href="https://menus.dining.brown.edu/" target="_blank" rel="noopener">Brown Dining</a>
-        · synced ${updated < 1 ? "within the hour" : updated < 48 ? `${updated}h ago` : `${Math.round(updated / 24)} days ago`}</p>`;
+        · menus last changed ${updated < 1 ? "within the hour" : updated < 48 ? `${updated}h ago` : `${Math.round(updated / 24)} days ago`}, checked hourly</p>`;
     return;
   }
 
@@ -1380,6 +1396,7 @@ function resize() {
   const dpr = window.devicePixelRatio || 1;
   for (const c of [canvas, mapCanvas, pinsCanvas]) { c.width = innerWidth * dpr; c.height = innerHeight * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  layoutPanels();
   if (meta && !fitted) reset(); else requestDraw();
 }
 function reset() {
