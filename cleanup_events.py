@@ -31,6 +31,19 @@ ORPHAN_GRACE = dt.timedelta(hours=1)    # never touch files a post-in-progress m
 PAGE = 1000
 
 
+def key_role(key):
+    """The role inside a legacy (JWT) Supabase key, e.g. 'anon' or 'service_role'; None for new-style keys."""
+    import base64
+    parts = key.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload)).get("role")
+    except ValueError:
+        return None
+
+
 def parse_time(s):
     return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
 
@@ -134,6 +147,11 @@ def main():
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not key:
         sys.exit("SUPABASE_SERVICE_ROLE_KEY is not set (it belongs in a GitHub Actions secret)")
+    role = key_role(key)
+    if role not in ("service_role", None):
+        # the public anon key would "work" but only see what visitors see, so nothing would ever be cleaned
+        sys.exit(f"SUPABASE_SERVICE_ROLE_KEY holds a '{role}' key; it needs the service_role key")
+    print(f"Using a {role or 'secret'} key")
 
     api = Supabase(SUPABASE_URL, key)
     now = dt.datetime.now(dt.timezone.utc)
