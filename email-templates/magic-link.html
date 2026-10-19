@@ -1,0 +1,38 @@
+<!--
+  Supabase: Authentication -> Emails -> Templates -> "Magic Link"   (returning users)
+  Subject:  Your Pixel Campus sign-in link
+  Paste everything below this comment into the message body.
+  {{ .ConfirmationURL }} is filled in by Supabase. The bunny image is served from the Pixel Campus site.
+-->
+<div style="margin:0;padding:24px 12px;background:#f4efe6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;margin:0 auto;background:#ffffff;border:3px solid #2a2724;border-radius:6px;">
+    <tr>
+      <td style="padding:28px 28px 8px;text-align:center;">
+        <img src="https://squadeldee.github.io/bitcrushed_campus_map/email/bunny.png" width="96" height="84" alt="A pixel-art bunny" style="display:block;margin:0 auto;image-rendering:pixelated;border:0;">
+        <p style="margin:14px 0 0;font-family:'Courier New',Courier,monospace;font-size:20px;font-weight:bold;letter-spacing:2px;color:#2a2724;">PIXEL CAMPUS</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:8px 28px 4px;font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5;color:#2a2724;">
+        <p style="margin:0 0 12px;">Welcome back!</p>
+        <p style="margin:0 0 20px;">Here's your link to sign in to Pixel Campus. Tap it on the same device where you asked for it, and you'll land right back on the map.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px 8px;text-align:center;">
+        <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 26px;background:#e07a55;color:#1c1a18;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;text-decoration:none;border:3px solid #2a2724;border-radius:4px;">Sign in to Pixel Campus</a>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:16px 28px 24px;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#6b645b;">
+        <p style="margin:0 0 10px;">The link works once and expires soon. If the button doesn't work, copy this into your browser:<br><a href="{{ .ConfirmationURL }}" style="color:#b85a3a;word-break:break-all;">{{ .ConfirmationURL }}</a></p>
+        <p style="margin:0;">Didn't ask to sign in? You can safely ignore this email. Nothing happens unless the link is opened.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:14px 28px;border-top:2px dashed #e6dfd3;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#8d8680;text-align:center;">
+        Pixel Campus · a pixel-art map of College Hill<br>An unofficial student project, not affiliated with Brown University
+      </td>
+    </tr>
+  </table>
+</div>
