@@ -39,15 +39,16 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #events h3 { margin: 6px 0 2px; font-size: 16px; }
   #events h4 { margin: 12px 0 4px; font-size: 13px; color: var(--accent); }
   #events .ev-row { width: 100%; display: grid; grid-template-columns: 48px 1fr; gap: 10px; align-items: center; text-align: left;
-    background: transparent; border-radius: 0; border-bottom: 1px solid #3a3530; padding: 7px 2px; }
+    background: transparent; padding: 7px 2px; }
   #events .ev-row:hover { background: #3a3530; }
   #events .ev-row small { display: block; color: var(--muted); font-size: 12px; }
-  #events .ev-thumb { width: 48px; height: 48px; object-fit: cover; background: #3a3530; border-radius: 3px; display: block; }
-  #events .ev-flyer { width: 100%; display: block; border-radius: 4px; margin: 8px 0; background: #3a3530; min-height: 120px; }
+  #events .ev-thumb { width: 48px; height: 48px; object-fit: cover; background: #3a3530; display: block; }
+  #events .ev-flyer { width: 100%; display: block; margin: 8px 0; background: #3a3530; min-height: 120px;
+    border: var(--px) solid #0f0d0b; image-rendering: auto; }
   #events .ev-meta { color: var(--muted); font-size: 13px; margin: 2px 0; }
   #events .ev-desc { white-space: pre-wrap; font-size: 14px; margin: 8px 0; overflow-wrap: anywhere; }
   #events .ev-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
-  #events .ev-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin-left: 6px; vertical-align: 1px; }
+  #events .ev-badge { display: inline-block; padding: 1px 6px; font-size: 11px; margin-left: 6px; vertical-align: 1px; }
   #events .ev-badge.pending { background: #e9b949; color: #1c1a18; }
   #events .ev-badge.rejected, #events .ev-badge.removed { background: #8f3f3f; color: #fff; }
   #events .ev-badge.approved { background: #4f8f3f; color: #fff; }
@@ -55,13 +56,13 @@ document.head.insertAdjacentHTML("beforeend", `<style>
   #events .ev-empty { color: var(--muted); }
   #events label { display: block; margin: 9px 0 3px; font-size: 13px; color: var(--muted); }
   #events input, #events textarea, #events select { width: 100%; box-sizing: border-box; background: #2f2b27; color: var(--text);
-    border: 1px solid #45403a; border-radius: 4px; padding: 6px 8px; font: inherit; font-size: 14px; }
+    padding: 6px 8px; font: inherit; font-size: 14px; }
   #events textarea { min-height: 80px; resize: vertical; }
   #events input[type=checkbox] { width: auto; margin-right: 6px; }
   #events .ev-inline { display: flex; gap: 6px; align-items: center; }
   #events .ev-inline > * { flex: 1; }
   #events .ev-preview { display: flex; gap: 10px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--muted); }
-  #events .ev-preview img { width: 64px; height: 64px; object-fit: cover; border-radius: 3px; }
+  #events .ev-preview img { width: 64px; height: 64px; object-fit: cover; border: 2px solid #0f0d0b; }
   #events .ev-danger { background: #8f3f3f; }
   #ev-hint { top: 64px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; z-index: 6; }
   #ev-hint[hidden] { display: none; }
